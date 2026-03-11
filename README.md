@@ -6,7 +6,7 @@ Point it at an inventory file, give it credentials, and it will SSH (or Telnet) 
 
 ## Why uv?
 
-We recommend [uv](https://docs.astral.sh/uv/) to run this tool. With uv there's no virtual environment to manage, no `pip install` dance, no dependency conflicts. Just clone and run:
+We recommend [uv](https://docs.astral.sh/uv/) to run this tool. With uv there's no virtual environment to manage, no pip install shenanigans. No `error: externally-managed-environment` on fresh hosts. Just clone and run:
 
 ```bash
 uv run main.py linux -i linux-inv.json
