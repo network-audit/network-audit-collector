@@ -1,66 +1,76 @@
-# network-audit
+# network-audit-collector
 
-CLI tool for collecting device info across your network and checking EOL/CVE status via [network-audit.io](https://network-audit.io).
+A CLI tool that scans your Cisco network devices and Linux hosts, then checks their EOL (End-of-Life) and CVE status against the [network-audit.io](https://network-audit.io) API.
 
-## Install
+Point it at an inventory file, give it credentials, and it will SSH (or Telnet) into each device, pull version info, and tell you what's end-of-life, what has known vulnerabilities, and what's approaching EOL — all in one table with a CSV export.
 
-Requires [uv](https://docs.astral.sh/uv/).
+## Why uv?
 
-```bash
-git clone <repo-url> && cd network-collector
-cp inv.json.example inv.json   # add your devices
-cp .env.example .env           # add your API credentials
-```
-
-## Usage (unified CLI)
+We recommend [uv](https://docs.astral.sh/uv/) to run this tool. With uv there's no virtual environment to manage, no `pip install` dance, no dependency conflicts. Just clone and run:
 
 ```bash
-# Cisco devices — SSH
-python main.py network -u admin --ask-pass -i inv.json
-
-# Cisco devices — Telnet
-python main.py network -u admin --ask-pass --telnet -i inv.json
-
-# Linux hosts — key auth
-python main.py linux -u bl -i linux-inv.json
-
-# Linux hosts — password auth
-python main.py linux -u bl --ask-pass -i linux-inv.json
-
-# Check API account status
-python main.py account
+uv run main.py linux -i linux-inv.json
 ```
 
-Or with uv:
+That's it. uv reads `pyproject.toml`, installs what's needed in an isolated cache, and runs the script. No `pip install -r requirements.txt`, no `python -m venv`, no activating anything. It just works.
+
+If you prefer traditional pip, that works too — but uv is faster and avoids the "it works on my machine" dependency headaches.
+
+## Quick Start
 
 ```bash
-uv run python main.py network -u admin --ask-pass -i inv.json
-uv run python main.py linux -u bl -i linux-inv.json
-uv run python main.py account
+git clone https://github.com/network-audit/network-audit-collector.git
+cd network-audit-collector
+
+# Configure your API key (get one at https://network-audit.io)
+cp .env.example .env
+# Edit .env with your API key
+
+# Create your inventory file
+cp examples/linux-inv.json linux-inv.json
+# Edit with your actual hosts
+
+# Run it
+uv run main.py linux -i linux-inv.json
 ```
 
-### Subcommands
+## Usage
 
-| Command   | Description                          |
-|-----------|--------------------------------------|
-| `network` | Scan Cisco devices (SSH/Telnet)      |
-| `linux`   | Scan Linux hosts (SSH)               |
-| `account` | Check network-audit.io account info  |
+The CLI has three subcommands:
 
-Run `python main.py <command> --help` for full flag details.
+```bash
+# Scan Cisco devices via SSH
+uv run main.py network -u admin --ask-pass -i inv.json
+
+# Scan Cisco devices via Telnet
+uv run main.py network -u admin --ask-pass --telnet -i inv.json
+
+# Scan Linux hosts (defaults to current user + key auth)
+uv run main.py linux -i linux-inv.json
+
+# Scan Linux hosts with password auth
+uv run main.py linux -u admin --ask-pass -i linux-inv.json
+
+# Check your API account status
+uv run main.py account
+```
+
+Run `uv run main.py <command> --help` for full flag details.
 
 ## Configuration
 
-### `.env`
+### API Credentials
+
+Create a `.env` file with your [network-audit.io](https://network-audit.io) API key:
 
 ```
 api_url=https://api.network-audit.io
 api_key=your_api_key_here
 ```
 
-### Inventory files
+### Inventory Files
 
-JSON arrays of objects with a `host` key and optional `name`:
+JSON arrays with a `host` key and optional `name` for each device:
 
 ```json
 [
@@ -69,40 +79,86 @@ JSON arrays of objects with a `host` key and optional `name`:
 ]
 ```
 
+See `examples/` for sample inventory files.
+
 ## Example Output
 
+These examples use real data from the network-audit.io API.
+
+### Linux Scan
+
 ```
-$ python main.py linux -u bl -i linux-inv.json
+$ uv run main.py linux -i linux-inv.json
 ╭─────────────────────────────╮
 │ Linux Audit Scan            │
 │ Powered by network-audit.io │
 ╰─────────────────────────────╯
-  Scanning hosts... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 12/12
-✔ dns: Debian GNU/Linux 13 (trixie)
-✔ vpn: Debian GNU/Linux 13 (trixie)
-...
 
-╭────────────────────────────────── Summary ───────────────────────────────────╮
-│ Total hosts: 12  |  Errors: 0  |  EOL: 0  |  CSV: data/2026-03-02_linux.csv │
-╰──────────────────────────────────────────────────────────────────────────────╯
+                                            Linux Audit Results
+┏━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━┓
+┃ Name       ┃ Host         ┃ Distro ┃ Version ┃ Codename     ┃ LTS ┃ EOL Status ┃ EOL Date   ┃ Days Left ┃
+┡━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━┩
+│ web-server │ 192.168.1.10 │ ubuntu │ 24.04   │ Noble Numbat │ Yes │ Current    │ 2029-05-31 │      1177 │
+├────────────┼──────────────┼────────┼─────────┼──────────────┼─────┼────────────┼────────────┼───────────┤
+│ db-server  │ 192.168.1.11 │ debian │ 12      │ Bookworm     │ No  │ Warning    │ 2026-06-10 │        91 │
+├────────────┼──────────────┼────────┼─────────┼──────────────┼─────┼────────────┼────────────┼───────────┤
+│ legacy-app │ 192.168.1.12 │ centos │ 7       │              │ No  │ EOL        │ 2020-08-06 │   EXPIRED │
+└────────────┴──────────────┴────────┴─────────┴──────────────┴─────┴────────────┴────────────┴───────────┘
+
+╭────────────────────────────────────────────────────── Summary ───────────────────────────────────────────────────────╮
+│ Total hosts: 3  |  Errors: 0  |  EOL: 1  |  Warning: 1  |  CSV: data/2026-03-10_linux.csv                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
-Results are exported to CSV in the `data/` directory:
+### Network Scan (Cisco)
+
+```
+$ uv run main.py network -u admin --ask-pass -i inv.json
+╭─────────────────────────────╮
+│ Network Audit Scan          │
+│ Powered by network-audit.io │
+╰─────────────────────────────╯
+
+                                    Network Audit Results
+┏━━━━━━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━┓
+┃ Name        ┃ Host        ┃ Hostname ┃ Model             ┃ OS Version ┃ EOL Status ┃ CVEs ┃
+┡━━━━━━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━┩
+│ core-switch │ 192.168.1.1 │ CORE-SW  │ WS-C3750X-48T-S   │ 15.2(4)E10 │ EOL        │ 20   │
+├─────────────┼─────────────┼──────────┼───────────────────┼────────────┼────────────┼──────┤
+│ dist-switch │ 192.168.1.2 │ DIST-SW  │ WS-C2960X-48FPS-L │ 15.2(7)E7  │ Current    │ 24   │
+├─────────────┼─────────────┼──────────┼───────────────────┼────────────┼────────────┼──────┤
+│ edge-router │ 192.168.1.3 │ EDGE-RTR │ CISCO1921/K9      │ 15.7(3)M6  │ EOL        │ 21   │
+└─────────────┴─────────────┴──────────┴───────────────────┴────────────┴────────────┴──────┘
+
+╭────────────────────────────────────────────────────── Summary ───────────────────────────────────────────────────────╮
+│ Total devices: 3  |  Errors: 0  |  EOL flagged: 2  |  CSV: data/2026-03-10_network.csv                               │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+```
+
+### CSV Output
+
+Results are automatically exported to timestamped CSV files in `data/`:
 
 ```csv
 name,host,distro,version,codename,lts,eol_status,eol_date,days_until_eol,error
-dns,10.6.6.100,debian,13,Trixie,False,current,2028-08-09,895,
-vpn,10.6.6.101,debian,13,Trixie,False,current,2028-08-09,895,
-monitoring,10.6.6.102,debian,13,Trixie,False,current,2028-08-09,895,
-...
+web-server,192.168.1.10,ubuntu,24.04,Noble Numbat,True,current,2029-05-31,1177,
+db-server,192.168.1.11,debian,12,Bookworm,False,warning,2026-06-10,91,
+legacy-app,192.168.1.12,centos,7,,False,eol,2020-08-06,-2043,
 ```
 
-## Backward Compatibility
+## Installing with pip
 
-The standalone collector scripts still work:
+If you'd rather not use uv, traditional pip works fine:
 
 ```bash
-python collector-network.py -u admin --ask-pass -i inv.json
-python collector-linux.py -i linux-inv.json -u bl
-python collector-account.py
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python main.py linux -i linux-inv.json
 ```
+
+## API
+
+This tool is a client for the [network-audit.io](https://network-audit.io) API. You'll need an API key to use it — sign up at [network-audit.io](https://network-audit.io).
+
+The API provides EOL lifecycle data for Cisco hardware and Linux distributions, plus CVE lookups for Cisco devices by model and IOS version.
