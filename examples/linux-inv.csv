@@ -1,0 +1,4 @@
+host,name
+192.168.1.10,web-server
+192.168.1.11,db-server
+192.168.1.12,legacy-app

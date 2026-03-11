@@ -70,7 +70,17 @@ api_key=your_api_key_here
 
 ### Inventory Files
 
-JSON arrays with a `host` key and optional `name` for each device:
+Inventory files can be JSON or CSV. Just use the right file extension and the tool figures it out.
+
+**CSV** (probably what you already have from a spreadsheet export):
+
+```csv
+host,name
+192.168.1.1,core-switch
+192.168.1.2,edge-router
+```
+
+**JSON**:
 
 ```json
 [
@@ -79,7 +89,9 @@ JSON arrays with a `host` key and optional `name` for each device:
 ]
 ```
 
-See `examples/` for sample inventory files.
+The `host` column/key is required. `name` is optional and defaults to the host value if not provided.
+
+See `examples/` for sample inventory files in both formats.
 
 ## Example Output
 

@@ -70,6 +70,11 @@ def main():
         "--account", action="store_true", help="Show account number"
     )
 
+    # status subcommand
+    subparsers.add_parser(
+        "status", help="Check network-audit.io API status (for scripting/cron)"
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -86,6 +91,10 @@ def main():
         run(args)
     elif args.command == "account":
         from network_audit.commands.account import run
+
+        run(args)
+    elif args.command == "status":
+        from network_audit.commands.status import run
 
         run(args)
 

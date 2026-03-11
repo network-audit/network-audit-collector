@@ -14,7 +14,9 @@ __pycache__/
 
 # Real inventory files (use examples/ for reference)
 /inv.json
+/inv.csv
 /*-inv.json
+/*-inv.csv
 
 # Output data
 data/
