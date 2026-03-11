@@ -36,8 +36,6 @@ uv run main.py linux -i linux-inv.json
 
 ## Usage
 
-The CLI has three subcommands:
-
 ```bash
 # Scan Cisco devices via SSH
 uv run main.py network -u admin --ask-pass -i inv.json
@@ -56,6 +54,33 @@ uv run main.py account
 ```
 
 Run `uv run main.py <command> --help` for full flag details.
+
+## API Status
+
+Before running a scan you can check if the API is up:
+
+```bash
+uv run main.py status
+```
+
+```
+╭────────────────────────────── network-audit.io ──────────────────────────────╮
+│ Status: Operational                                                          │
+│ Updated: 2026-03-11T01:18:13Z                                                │
+╰──────────────────────────────────────────────────────────────────────────────╯
+                          Planned Maintenance
+┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Start                ┃ End                  ┃ Description            ┃
+┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ 2026-03-14T10:00:00Z │ 2026-03-14T11:00:00Z │ OS patching and reboot │
+└──────────────────────┴──────────────────────┴────────────────────────┘
+```
+
+The exit code is 0 when operational and 1 for anything else, so you can gate your scans on it in scripts or cron:
+
+```bash
+uv run main.py status && uv run main.py linux -i hosts.csv
+```
 
 ## Configuration
 

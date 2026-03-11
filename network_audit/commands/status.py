@@ -4,6 +4,7 @@ import sys
 
 import requests
 from rich.panel import Panel
+from rich.table import Table
 
 from ..display import console
 
@@ -25,10 +26,10 @@ def run(args: object) -> None:
     data = resp.json()
     status = data.get("status", "unknown")
     message = data.get("message")
-    maintenance = data.get("maintenance")
+    planned = data.get("planned_maintenance", [])
     updated_at = data.get("updated_at", "")
 
-    # Display
+    # Status display
     if status == "operational":
         status_display = "[bold green]Operational[/bold green]"
     elif status == "maintenance":
@@ -39,12 +40,26 @@ def run(args: object) -> None:
     lines = [f"Status: {status_display}"]
     if message:
         lines.append(f"Message: {message}")
-    if maintenance:
-        lines.append(f"Maintenance: [yellow]{maintenance}[/yellow]")
     if updated_at:
         lines.append(f"[dim]Updated: {updated_at}[/dim]")
 
     console.print(Panel("\n".join(lines), title="network-audit.io"))
+
+    # Planned maintenance windows
+    if planned:
+        table = Table(title="Planned Maintenance", show_lines=True)
+        table.add_column("Start", style="yellow")
+        table.add_column("End", style="yellow")
+        table.add_column("Description")
+
+        for window in planned:
+            table.add_row(
+                window.get("start", ""),
+                window.get("end", ""),
+                window.get("description", ""),
+            )
+
+        console.print(table)
 
     # Exit code for scripting: 0 = operational, 1 = anything else
     if status != "operational":
