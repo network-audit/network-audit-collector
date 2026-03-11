@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.egg-info/
+*.pyc
+
+# Virtual environments
+*.venv/
+
+# Linting/tooling cache
+.ruff_cache/
+
+# Secrets
+*.env
+
+# Real inventory files (use examples/ for reference)
+/inv.json
+/*-inv.json
+
+# Output data
+data/
+results.csv
+
+# Editor/IDE
+.rules.md
+.agents.md
+.project.md

@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "network-audit"
+version = "0.1.0"
+description = "Network & Linux audit tools powered by network-audit.io"
+requires-python = ">=3.9"
+dependencies = [
+    "paramiko",
+    "rich",
+    "requests",
+    "python-dotenv",
+]
+
+[tool.setuptools.packages.find]
+include = ["network_audit*"]
+
+[project.scripts]
+network-audit = "network_audit.cli:main"

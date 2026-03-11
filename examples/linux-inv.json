@@ -1,0 +1,5 @@
+[
+  {"host": "192.168.1.10", "name": "web-server"},
+  {"host": "192.168.1.11", "name": "db-server"},
+  {"host": "192.168.1.12", "name": "legacy-app"}
+]

@@ -1,0 +1,4 @@
+name,host,distro,version,codename,lts,eol_status,eol_date,days_until_eol,error
+web-server,192.168.1.10,ubuntu,24.04,Noble Numbat,True,current,2029-05-31,1177,
+db-server,192.168.1.11,debian,12,Bookworm,False,warning,2026-06-10,91,
+legacy-app,192.168.1.12,centos,7,,False,eol,2020-08-06,-2043,

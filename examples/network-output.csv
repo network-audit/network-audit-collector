@@ -1,0 +1,4 @@
+name,host,hostname,model,os_version,eol_status,cve_count,error
+core-switch,192.168.1.1,CORE-SW,WS-C3750X-48T-S,15.2(4)E10,eol,20,
+dist-switch,192.168.1.2,DIST-SW,WS-C2960X-48FPS-L,15.2(7)E7,current,24,
+edge-router,192.168.1.3,EDGE-RTR,CISCO1921/K9,15.7(3)M6,eol,21,
