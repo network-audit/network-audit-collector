@@ -2,7 +2,7 @@
 
 A CLI tool that scans your Cisco network devices and Linux hosts, then checks their EOL (End-of-Life) and CVE status against the [network-audit.io](https://network-audit.io) API.
 
-Point it at an inventory file, give it credentials, and it will SSH (or Telnet) into each device, pull version info, and tell you what's end-of-life, what has known vulnerabilities, and what's approaching EOL — all in one table with a CSV export.
+Point it at an inventory file, give it credentials, and it will SSH (or Telnet) into each device, pull version info, and tell you what's end-of-life, what has known vulnerabilities, and what's approaching EOL. Results are displayed in a table and exported to CSV.
 
 ## Why uv?
 
@@ -14,7 +14,7 @@ uv run main.py linux -i linux-inv.json
 
 That's it. uv reads `pyproject.toml`, installs what's needed in an isolated cache, and runs the script. No `pip install -r requirements.txt`, no `python -m venv`, no activating anything. It just works.
 
-If you prefer traditional pip, that works too — but uv is faster and avoids the "it works on my machine" dependency headaches.
+If you prefer traditional pip, that works too. uv is just faster and avoids the "it works on my machine" dependency headaches.
 
 ## Quick Start
 
@@ -159,6 +159,6 @@ python main.py linux -i linux-inv.json
 
 ## API
 
-This tool is a client for the [network-audit.io](https://network-audit.io) API. You'll need an API key to use it — sign up at [network-audit.io](https://network-audit.io).
+This tool is a client for the [network-audit.io](https://network-audit.io) API. You'll need an API key to use it. Sign up at [network-audit.io](https://network-audit.io) to get one.
 
 The API provides EOL lifecycle data for Cisco hardware and Linux distributions, plus CVE lookups for Cisco devices by model and IOS version.
