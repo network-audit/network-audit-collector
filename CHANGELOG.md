@@ -2,25 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.2.0] - 2026-03-02
+## [0.1] - 2026-03-02
+
+Initial public release.
 
 ### Added
-- Unified CLI (`main.py`) with aws-cli style subcommands
-- Renamed standalone scripts for consistency:
-  - `collector.py` → `collector-network.py`
-  - `linux-collector.py` → `collector-linux.py`
-  - `acct.py` → `collector-account.py`
-
-### Changed
-- CLI usage now uses subcommands: `python main.py <command>`
-- Backward compatibility maintained with standalone scripts
-
-## [0.1.0] - 2026-02-25
-
-### Added
-- Initial release
-- Network device collector (Cisco SSH/Telnet)
-- Linux host collector (SSH)
-- Account status checker
-- CSV export functionality
+- Unified CLI (`main.py`) with subcommands: `network`, `linux`, `account`
+- Network device collector with SSH and Telnet support (Cisco IOS)
+- Linux host collector via SSH
+- EOL and CVE status lookups via network-audit.io API
+- API account status checker with planned maintenance display
+- CSV inventory support alongside JSON
+- CSV export with timestamped filenames
 - Rich terminal output with progress bars
