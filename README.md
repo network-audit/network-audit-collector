@@ -22,9 +22,8 @@ If you prefer traditional pip, that works too. uv is just faster and avoids the 
 git clone https://github.com/network-audit/network-audit-collector.git
 cd network-audit-collector
 
-# Configure your API key (get one at https://network-audit.io)
-cp .env.example .env
-# Edit .env with your API key
+# Import your API key (get one at https://network-audit.io)
+uv run main.py account --import-key
 
 # Create your inventory file
 cp examples/linux-inv.json linux-inv.json
@@ -86,7 +85,15 @@ uv run main.py status && uv run main.py linux -i hosts.csv
 
 ### API Credentials
 
-Create a `.env` file with your [network-audit.io](https://network-audit.io) API key:
+The recommended way to configure your API key:
+
+```bash
+uv run main.py account --import-key
+```
+
+This saves your credentials to `~/.config/network-audit-collector/.env` with `600` permissions, keeping them out of your project directory and version control.
+
+The tool also supports a local `.env` file as a fallback:
 
 ```
 api_url=https://api.network-audit.io

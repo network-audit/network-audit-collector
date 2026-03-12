@@ -10,6 +10,11 @@ from ..display import console
 
 def run(args):
     """Run the account subcommand."""
+    if args.import_key:
+        from ..config import import_key
+        import_key()
+        return
+
     import requests
 
     api_url, api_key = load_config()

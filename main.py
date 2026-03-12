@@ -69,6 +69,9 @@ def main():
     acct_parser.add_argument(
         "--account", action="store_true", help="Show account number"
     )
+    acct_parser.add_argument(
+        "--import-key", action="store_true", help="Import API credentials to ~/.config"
+    )
 
     # status subcommand
     subparsers.add_parser(

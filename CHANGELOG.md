@@ -12,6 +12,7 @@ Initial public release.
 - Linux host collector via SSH
 - EOL and CVE status lookups via network-audit.io API
 - API account status checker with planned maintenance display
+- `account --import-key` for interactive API credential import to `~/.config/network-audit-collector/.env`
 - CSV inventory support alongside JSON
 - CSV export with timestamped filenames
 - Rich terminal output with progress bars

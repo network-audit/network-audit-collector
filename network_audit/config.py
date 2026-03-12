@@ -3,24 +3,76 @@
 import csv
 import json
 import os
+import stat
 import sys
+from pathlib import Path
 
 from dotenv import load_dotenv
 
 from .display import console
 
+CONFIG_DIR = Path.home() / ".config" / "network-audit-collector"
+CONFIG_ENV = CONFIG_DIR / ".env"
+
 
 def load_config():
-    """Load API credentials from .env file."""
-    load_dotenv()
+    """Load API credentials from .env file.
+
+    Checks ~/.config/network-audit-collector/.env first, then falls back
+    to a local .env in the current directory.
+    """
+    if CONFIG_ENV.exists():
+        load_dotenv(CONFIG_ENV)
+    else:
+        load_dotenv()
+
     api_url = os.getenv("api_url")
     api_key = os.getenv("api_key")
     if not api_url or not api_key:
         from rich.panel import Panel
-        console.print(Panel("[bold red]Missing api_url or api_key in .env file.[/]",
-                            title="Configuration Error"))
+        console.print(Panel(
+            "[bold red]Missing api_url or api_key.[/]\n"
+            "Run [cyan]uv run main.py account --import-key[/] to configure, "
+            "or create a .env file manually.",
+            title="Configuration Error"))
         sys.exit(1)
     return api_url.rstrip("/"), api_key
+
+
+def import_key():
+    """Interactively import API credentials to ~/.config/network-audit-collector/.env."""
+    from rich.panel import Panel
+
+    console.print(Panel(
+        "Import your network-audit.io API credentials.\n"
+        f"Credentials will be saved to [cyan]{CONFIG_ENV}[/]",
+        title="API Key Import"))
+
+    if CONFIG_ENV.exists():
+        load_dotenv(CONFIG_ENV)
+        existing_key = os.getenv("api_key", "")
+        masked = f"...{existing_key[-4:]}" if len(existing_key) >= 4 else "***"
+        console.print(f"[yellow]Existing API key found ({masked})[/]")
+        confirm = input("Overwrite? [y/N]: ").strip().lower()
+        if confirm != "y":
+            console.print("Aborted.")
+            return
+
+    api_url = input("API URL [https://api.network-audit.io]: ").strip()
+    if not api_url:
+        api_url = "https://api.network-audit.io"
+
+    api_key = input("API Key: ").strip()
+    if not api_key:
+        console.print("[bold red]API key cannot be empty.[/]")
+        sys.exit(1)
+
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    CONFIG_ENV.write_text(f"api_url={api_url}\napi_key={api_key}\n")
+    CONFIG_ENV.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 600
+
+    console.print(f"\n[green]Credentials saved to {CONFIG_ENV} (mode 600)[/]")
+    console.print(f"API Key: ...{api_key[-4:]}")
 
 
 def _load_json_inventory(path: str) -> list[dict]:
