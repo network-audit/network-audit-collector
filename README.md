@@ -1,5 +1,7 @@
 # network-audit-collector
 
+> If you run into any issues, please [open an issue](https://github.com/network-audit/network-audit-collector/issues), submit a PR, or send an email. The goal of this project is to help you get your time back.
+
 A CLI tool that scans your Cisco network devices and Linux hosts, then checks their EOL (End-of-Life) and CVE status against the [network-audit.io](https://network-audit.io) API.
 
 Point it at an inventory file, give it credentials, and it will SSH (or Telnet) into each device, pull version info, and tell you what's end-of-life, what has known vulnerabilities, and what's approaching EOL. Results are displayed in a table and exported to CSV.
