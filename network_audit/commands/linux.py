@@ -1,6 +1,8 @@
 """Linux host collector — SSH, parse os-release, check EOL via network-audit.io."""
 
 import json
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import quote
 
 from rich.live import Live
@@ -249,23 +251,33 @@ def run(args):
             progress = create_progress()
             task_id = progress.add_task("Scanning hosts...", total=len(inventory))
 
-            for device in inventory:
-                live.update(build_live_display(progress, status_lines,
-                                              f"[yellow]Scanning {device['name']} ({device['host']})...[/]"))
+            def _scan(device):
+                return scan_device(device, args.username, password, args.timeout, api_url, api_key,
+                                   debug=args.debug)
 
-                result = scan_device(device, args.username, password, args.timeout, api_url, api_key,
-                                     debug=args.debug)
-                results.append(result)
+            with ThreadPoolExecutor(max_workers=args.concurrent) as pool:
+                futures = {}
+                for i, device in enumerate(inventory):
+                    if i > 0 and args.delay > 0:
+                        time.sleep(args.delay)
+                    status_lines.append(f"[yellow]Scanning {device['name']} ({device['host']})...[/]")
+                    live.update(build_live_display(progress, status_lines))
+                    futures[pool.submit(_scan, device)] = device
 
-                if result["error"]:
-                    status_lines.append(f"[red]\u2718 {device['name']}: {result['error']}[/]")
-                else:
-                    status_lines.append(
-                        f"[green]\u2714 {device['name']}: {result['pretty_name']}[/]"
-                    )
+                for future in as_completed(futures):
+                    device = futures[future]
+                    result = future.result()
+                    results.append(result)
 
-                progress.advance(task_id)
-                live.update(build_live_display(progress, status_lines))
+                    if result["error"]:
+                        status_lines.append(f"[red]\u2718 {device['name']}: {result['error']}[/]")
+                    else:
+                        status_lines.append(
+                            f"[green]\u2714 {device['name']}: {result['pretty_name']}[/]"
+                        )
+
+                    progress.advance(task_id)
+                    live.update(build_live_display(progress, status_lines))
     except KeyboardInterrupt:
         console.print("\n[yellow]Scan cancelled by user[/]")
         return

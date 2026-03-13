@@ -40,6 +40,12 @@ def main():
         "-t", "--timeout", type=int, default=10, help="Connection timeout in seconds"
     )
     net_parser.add_argument("-o", "--output", default=None, help="CSV output filename")
+    net_parser.add_argument(
+        "-c", "--concurrent", type=int, default=1, help="Max concurrent connections (default: 1)"
+    )
+    net_parser.add_argument(
+        "--delay", type=float, default=0, help="Seconds to wait between launching connections"
+    )
 
     # linux subcommand
     linux_parser = subparsers.add_parser("linux", help="Scan Linux hosts (SSH)")
@@ -60,6 +66,12 @@ def main():
     )
     linux_parser.add_argument(
         "--debug", action="store_true", help="Print raw API responses"
+    )
+    linux_parser.add_argument(
+        "-c", "--concurrent", type=int, default=1, help="Max concurrent connections (default: 1)"
+    )
+    linux_parser.add_argument(
+        "--delay", type=float, default=0, help="Seconds to wait between launching connections"
     )
 
     # account subcommand
