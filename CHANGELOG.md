@@ -16,3 +16,6 @@ Initial public release.
 - CSV inventory support alongside JSON
 - CSV export with timestamped filenames
 - Rich terminal output with progress bars
+- Proxmox VE detection and EOL checking (auto-detects PVE hosts via `pveversion`)
+- Per-device `username` override in inventory JSON (e.g. `"username": "root"` for Proxmox)
+- `--concurrent` and `--delay` flags for parallel scanning

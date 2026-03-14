@@ -21,11 +21,24 @@ from ..ssh import ssh_connect
 # ---------------------------------------------------------------------------
 
 def ssh_collect(host, username, password, timeout):
-    """SSH into a Linux host and return /etc/os-release content."""
+    """SSH into a Linux host and return /etc/os-release content.
+
+    Also checks for Proxmox VE by running pveversion, appending the result
+    as a synthetic PVE_VERSION line so the parser can detect it.
+    """
     client = ssh_connect(host, username, password, timeout, use_keys=not password)
     try:
-        _, stdout, stderr = client.exec_command("cat /etc/os-release", timeout=timeout)
-        return stdout.read().decode("utf-8", errors="replace")
+        _, stdout, _ = client.exec_command("cat /etc/os-release", timeout=timeout)
+        os_release = stdout.read().decode("utf-8", errors="replace")
+
+        # Detect Proxmox VE (pveversion outputs e.g. "pve-manager/9.1.2/...")
+        _, pve_stdout, _ = client.exec_command("pveversion 2>/dev/null", timeout=timeout)
+        pve_line = pve_stdout.read().decode("utf-8", errors="replace").strip()
+        if pve_line.startswith("pve-manager/"):
+            pve_ver = pve_line.split("/")[1]
+            os_release += f"\nPVE_VERSION={pve_ver}\n"
+
+        return os_release
     finally:
         client.close()
 
@@ -35,7 +48,11 @@ def ssh_collect(host, username, password, timeout):
 # ---------------------------------------------------------------------------
 
 def parse_os_release(output):
-    """Parse /etc/os-release → {distro, version, pretty_name}."""
+    """Parse /etc/os-release → {distro, version, pretty_name}.
+
+    Detects Proxmox VE via the synthetic PVE_VERSION line appended by
+    ssh_collect, overriding the base Debian identity.
+    """
     result = {"distro": "Unknown", "version": "Unknown", "pretty_name": "Unknown"}
 
     fields = {}
@@ -45,12 +62,19 @@ def parse_os_release(output):
         key, _, val = line.partition("=")
         fields[key.strip()] = val.strip().strip('"')
 
-    if "ID" in fields:
-        result["distro"] = fields["ID"]
-    if "VERSION_ID" in fields:
-        result["version"] = fields["VERSION_ID"]
-    if "PRETTY_NAME" in fields:
-        result["pretty_name"] = fields["PRETTY_NAME"]
+    if "PVE_VERSION" in fields:
+        pve_full = fields["PVE_VERSION"]
+        pve_major = pve_full.split(".")[0]
+        result["distro"] = "proxmox"
+        result["version"] = pve_major
+        result["pretty_name"] = f"Proxmox VE {pve_full}"
+    else:
+        if "ID" in fields:
+            result["distro"] = fields["ID"]
+        if "VERSION_ID" in fields:
+            result["version"] = fields["VERSION_ID"]
+        if "PRETTY_NAME" in fields:
+            result["pretty_name"] = fields["PRETTY_NAME"]
 
     return result
 
@@ -252,7 +276,8 @@ def run(args):
             task_id = progress.add_task("Scanning hosts...", total=len(inventory))
 
             def _scan(device):
-                return scan_device(device, args.username, password, args.timeout, api_url, api_key,
+                user = device.get("username", args.username)
+                return scan_device(device, user, password, args.timeout, api_url, api_key,
                                    debug=args.debug)
 
             with ThreadPoolExecutor(max_workers=args.concurrent) as pool:
