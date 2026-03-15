@@ -317,7 +317,7 @@ FIELDNAMES = ["name", "host", "hostname", "model", "os_version",
 
 def display_summary(results, csv_file):
     """Print a Rich summary table and footer stats."""
-    table = Table(title="Network Audit Results", show_lines=True)
+    table = Table(title="Network Audit Results", show_lines=False)
     table.add_column("Name", style="cyan")
     table.add_column("Host", style="dim")
     table.add_column("Hostname", style="white")

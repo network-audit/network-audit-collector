@@ -176,7 +176,7 @@ def _build_csv_rows(results):
 # ---------------------------------------------------------------------------
 
 def display_summary(results, csv_file):
-    table = Table(title="Linux Audit Results", show_lines=True)
+    table = Table(title="Linux Audit Results", show_lines=False)
     table.add_column("Name", style="cyan")
     table.add_column("Host", style="dim")
     table.add_column("Distro", style="magenta")
