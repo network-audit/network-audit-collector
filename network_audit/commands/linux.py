@@ -1,9 +1,12 @@
 """Linux host collector — SSH, parse os-release, check EOL via network-audit.io."""
 
 import json
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import quote
+
+import paramiko
 
 from rich.live import Live
 from rich.panel import Panel
@@ -13,6 +16,7 @@ from ..api import api_get
 from ..config import load_config, load_inventory
 from ..display import build_live_display, console, create_progress
 from ..export import default_csv_path, export_csv
+from ..maintenance import wait_if_maintenance
 from ..ssh import ssh_connect
 
 
@@ -34,9 +38,12 @@ def ssh_collect(host, username, password, timeout):
         # Detect Proxmox VE (pveversion outputs e.g. "pve-manager/9.1.2/...")
         _, pve_stdout, _ = client.exec_command("pveversion 2>/dev/null", timeout=timeout)
         pve_line = pve_stdout.read().decode("utf-8", errors="replace").strip()
-        if pve_line.startswith("pve-manager/"):
-            pve_ver = pve_line.split("/")[1]
-            os_release += f"\nPVE_VERSION={pve_ver}\n"
+        try:
+            if pve_line.startswith("pve-manager/"):
+                pve_ver = pve_line.split("/")[1]
+                os_release += f"\nPVE_VERSION={pve_ver}\n"
+        except (IndexError, ValueError):
+            pass
 
         return os_release
     finally:
@@ -118,7 +125,7 @@ def scan_device(device, username, password, timeout, api_url, api_key, debug=Fal
         result["distro"] = parsed["distro"]
         result["version"] = parsed["version"]
         result["pretty_name"] = parsed["pretty_name"]
-    except Exception as e:
+    except (OSError, paramiko.SSHException) as e:
         result["error"] = str(e)
         return result
 
@@ -269,6 +276,7 @@ def run(args):
 
     results = []
     status_lines = []
+    status_lock = threading.Lock()
 
     try:
         with Live(console=console, refresh_per_second=4) as live:
@@ -276,6 +284,7 @@ def run(args):
             task_id = progress.add_task("Scanning hosts...", total=len(inventory))
 
             def _scan(device):
+                wait_if_maintenance(api_url)
                 user = device.get("username", args.username)
                 return scan_device(device, user, password, args.timeout, api_url, api_key,
                                    debug=args.debug)
@@ -285,7 +294,8 @@ def run(args):
                 for i, device in enumerate(inventory):
                     if i > 0 and args.delay > 0:
                         time.sleep(args.delay)
-                    status_lines.append(f"[yellow]Scanning {device['name']} ({device['host']})...[/]")
+                    with status_lock:
+                        status_lines.append(f"[yellow]Scanning {device['name']} ({device['host']})...[/]")
                     live.update(build_live_display(progress, status_lines))
                     futures[pool.submit(_scan, device)] = device
 
@@ -294,12 +304,13 @@ def run(args):
                     result = future.result()
                     results.append(result)
 
-                    if result["error"]:
-                        status_lines.append(f"[red]\u2718 {device['name']}: {result['error']}[/]")
-                    else:
-                        status_lines.append(
-                            f"[green]\u2714 {device['name']}: {result['pretty_name']}[/]"
-                        )
+                    with status_lock:
+                        if result["error"]:
+                            status_lines.append(f"[red]\u2718 {device['name']}: {result['error']}[/]")
+                        else:
+                            status_lines.append(
+                                f"[green]\u2714 {device['name']}: {result['pretty_name']}[/]"
+                            )
 
                     progress.advance(task_id)
                     live.update(build_live_display(progress, status_lines))

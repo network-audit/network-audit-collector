@@ -67,21 +67,78 @@ uv run main.py status
 ```
 ╭────────────────────────────── network-audit.io ──────────────────────────────╮
 │ Status: Operational                                                          │
-│ Updated: 2026-03-11T01:18:13Z                                                │
+│ API Key: Valid                                                               │
+│ Updated: 2026-03-17T19:15:00Z                                                │
 ╰──────────────────────────────────────────────────────────────────────────────╯
-                          Planned Maintenance
-┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Start                ┃ End                  ┃ Description            ┃
-┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ 2026-03-14T10:00:00Z │ 2026-03-14T11:00:00Z │ OS patching and reboot │
-└──────────────────────┴──────────────────────┴────────────────────────┘
+                              Planned Maintenance
+┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Start                ┃ End                  ┃ Description                    ┃
+┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ 2026-03-21T09:00:00Z │ 2026-03-21T10:00:00Z │ Scheduled system patching and  │
+│                      │                      │ package updates                │
+└──────────────────────┴──────────────────────┴────────────────────────────────┘
 ```
 
-The exit code is 0 when operational and 1 for anything else, so you can gate your scans on it in scripts or cron:
+### JSON output for scripting
+
+Use `--json` to get machine-readable output with a `should_backoff` boolean that accounts for both platform health and active maintenance windows:
 
 ```bash
-uv run main.py status && uv run main.py linux -i hosts.csv
+uv run main.py status --json
 ```
+
+```json
+{
+  "healthy": true,
+  "should_backoff": false,
+  "status": "operational",
+  "updated_at": "2026-03-17T19:15:00Z",
+  "api_key_valid": true,
+  "maintenance_active": false,
+  "maintenance_starts_in_minutes": 5140,
+  "planned_maintenance": [...]
+}
+```
+
+### Cron examples
+
+Simple pre-flight check — skip the scan if the API is down:
+
+```bash
+# /etc/cron.d/network-audit
+0 6 * * 1  admin  cd /opt/network-audit-collector && uv run main.py status && uv run main.py linux -i hosts.json
+```
+
+With `--json` for more control — back off during maintenance or if the key is invalid:
+
+```bash
+#!/usr/bin/env bash
+# /opt/network-audit-collector/scan.sh
+set -euo pipefail
+cd /opt/network-audit-collector
+
+if uv run main.py status --json | jq -e '.should_backoff' > /dev/null; then
+    echo "API unavailable or maintenance active — skipping scan"
+    exit 0
+fi
+
+uv run main.py linux -i hosts.json
+```
+
+### Mid-scan maintenance awareness
+
+Long-running scans automatically pause if a maintenance window starts during execution. In-flight device scans finish cleanly, then the tool waits until maintenance ends before resuming:
+
+```
+Scanning host-01... ✔
+Scanning host-02... ✔
+⏸  Maintenance in progress: Scheduled system patching and package updates
+   Pausing scan — will resume automatically when maintenance ends (checking every 60s)...
+▶  Maintenance ended — resuming scan
+Scanning host-03... ✔
+```
+
+No flags needed — this behavior is built in to both `linux` and `network` commands.
 
 ## Configuration
 

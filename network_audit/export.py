@@ -26,7 +26,7 @@ def export_csv(rows, fieldnames, filename):
     Returns:
         The filename written.
     """
-    with open(filename, "w", newline="") as f:
+    with open(filename, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for row in rows:

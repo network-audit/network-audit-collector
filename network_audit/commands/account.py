@@ -15,6 +15,15 @@ def run(args):
         import_key()
         return
 
+    if args.api_key is not None:
+        if args.api_key == "__show__":
+            from ..config import show_api_key
+            show_api_key()
+        else:
+            from ..config import set_api_key
+            set_api_key(args.api_key)
+        return
+
     import requests
 
     api_url, api_key = load_config()
@@ -32,7 +41,9 @@ def run(args):
         sys.exit(1)
 
     d = resp.json()["data"]
-    remaining = d["rate_limit_daily"] - d["queries_today"]
+    monthly_limit = d.get("rate_limit_monthly", d.get("rate_limit_daily", 0))
+    monthly_used = d.get("queries_this_month", d.get("queries_today", 0))
+    remaining = monthly_limit - monthly_used
 
     table = Table(title="Network-Audit.io Account", show_header=False, show_lines=False)
     table.add_column("Field", style="bold")
@@ -42,7 +53,7 @@ def run(args):
         table.add_row("Account", d["account_number"])
     table.add_row("Tier", d["tier"])
     table.add_row(
-        "Today", f"{d['queries_today']} / {d['rate_limit_daily']} queries used"
+        "This month", f"{monthly_used} / {monthly_limit} queries used"
     )
     table.add_row("Remaining", str(remaining))
     table.add_row("All-time", f"{d['queries_total']} total queries")

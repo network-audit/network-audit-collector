@@ -5,8 +5,16 @@ import paramiko
 
 
 def create_ssh_client():
-    """Create a paramiko SSHClient with auto-add host key policy."""
+    """Create a paramiko SSHClient with auto-add host key policy.
+
+    Note:
+        Uses AutoAddPolicy which automatically accepts unknown host keys.
+        This is convenient for network device scanning but does not verify
+        host identity. Do not use in security-sensitive contexts where
+        host key verification is required.
+    """
     client = paramiko.SSHClient()
+    client.load_system_host_keys()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     return client
 
@@ -47,7 +55,7 @@ def ssh_connect(host, username, password, timeout, use_keys=False):
 
     try:
         client.connect(**connect_kwargs)
-    except (paramiko.AuthenticationException, paramiko.SSHException) as e:
+    except (paramiko.AuthenticationException, paramiko.SSHException):
         client.close()
         raise
     return client

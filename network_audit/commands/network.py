@@ -3,9 +3,12 @@
 import getpass
 import re
 import socket
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import quote
+
+import paramiko
 
 from rich.live import Live
 from rich.panel import Panel
@@ -15,6 +18,7 @@ from ..api import api_get
 from ..config import load_config, load_inventory
 from ..display import build_live_display, console, create_progress
 from ..export import default_csv_path, export_csv
+from ..maintenance import wait_if_maintenance
 from ..ssh import create_ssh_client
 
 
@@ -62,8 +66,17 @@ def ssh_collect(host, username, password, timeout):
 # Telnet Collection
 # ---------------------------------------------------------------------------
 
-def _telnet_read_until(sock, marker, timeout):
-    """Read from socket until marker bytes are found or timeout expires."""
+def _telnet_read_until(sock, markers, timeout):
+    """Read from socket until any marker bytes are found or timeout expires.
+
+    Args:
+        sock: Connected socket.
+        markers: A single bytes marker or a sequence of bytes markers.
+            Reading stops when any marker is found in the buffer.
+        timeout: Read timeout in seconds.
+    """
+    if isinstance(markers, bytes):
+        markers = (markers,)
     buf = b""
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -100,7 +113,7 @@ def _telnet_read_until(sock, marker, timeout):
                 clean += bytes([chunk[i]])
                 i += 1
             buf += clean
-            if marker in buf:
+            if any(m in buf for m in markers):
                 break
         except socket.timeout:
             break
@@ -116,20 +129,21 @@ def telnet_collect(host, username, password, timeout):
         _telnet_read_until(sock, b"Password:", timeout)
         sock.sendall(password.encode("ascii") + b"\n")
 
-        # Wait for prompt (# or >)
-        _telnet_read_until(sock, b"#", timeout)
+        # Wait for prompt (# = privileged, > = user mode)
+        prompt_markers = (b"#", b">")
+        _telnet_read_until(sock, prompt_markers, timeout)
 
         sock.sendall(b"terminal length 0\n")
         time.sleep(0.5)
-        _telnet_read_until(sock, b"#", timeout)
+        _telnet_read_until(sock, prompt_markers, timeout)
 
         # show version
         sock.sendall(b"show version\n")
-        version_output = _telnet_read_until(sock, b"#", timeout).decode("utf-8", errors="replace")
+        version_output = _telnet_read_until(sock, prompt_markers, timeout).decode("utf-8", errors="replace")
 
         # show inventory
         sock.sendall(b"show inventory\n")
-        inventory_output = _telnet_read_until(sock, b"#", timeout).decode("utf-8", errors="replace")
+        inventory_output = _telnet_read_until(sock, prompt_markers, timeout).decode("utf-8", errors="replace")
 
         return version_output, inventory_output
     finally:
@@ -234,7 +248,7 @@ def scan_device(device, username, password, timeout, api_url, api_key, use_telne
             pid = parse_show_inventory(inv_out)
             if pid:
                 result["model"] = pid
-    except Exception as e:
+    except (OSError, paramiko.SSHException) as e:
         result["error"] = str(e)
         return result
 
@@ -393,6 +407,7 @@ def run(args):
 
     results = []
     status_lines = []
+    status_lock = threading.Lock()
 
     try:
         with Live(console=console, refresh_per_second=4) as live:
@@ -400,6 +415,7 @@ def run(args):
             task_id = progress.add_task("Scanning devices...", total=len(inventory))
 
             def _scan(device):
+                wait_if_maintenance(api_url)
                 return scan_device(device, args.username, password, args.timeout, api_url, api_key,
                                    use_telnet=args.telnet)
 
@@ -408,7 +424,8 @@ def run(args):
                 for i, device in enumerate(inventory):
                     if i > 0 and args.delay > 0:
                         time.sleep(args.delay)
-                    status_lines.append(f"[yellow]Scanning {device['name']} ({device['host']})...[/]")
+                    with status_lock:
+                        status_lines.append(f"[yellow]Scanning {device['name']} ({device['host']})...[/]")
                     live.update(build_live_display(progress, status_lines))
                     futures[pool.submit(_scan, device)] = device
 
@@ -417,10 +434,11 @@ def run(args):
                     result = future.result()
                     results.append(result)
 
-                    if result["error"]:
-                        status_lines.append(f"[red]\u2718 {device['name']} ({device['host']}): {result['error']}[/]")
-                    else:
-                        status_lines.append(f"[green]\u2714 {device['name']} ({device['host']}): {result['model']}[/]")
+                    with status_lock:
+                        if result["error"]:
+                            status_lines.append(f"[red]\u2718 {device['name']} ({device['host']}): {result['error']}[/]")
+                        else:
+                            status_lines.append(f"[green]\u2714 {device['name']} ({device['host']}): {result['model']}[/]")
 
                     progress.advance(task_id)
                     live.update(build_live_display(progress, status_lines))

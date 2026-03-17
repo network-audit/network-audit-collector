@@ -21,10 +21,10 @@ def load_config():
     Checks ~/.config/network-audit-collector/.env first, then falls back
     to a local .env in the current directory.
     """
+    # Local .env takes priority over the global config
+    load_dotenv()
     if CONFIG_ENV.exists():
-        load_dotenv(CONFIG_ENV)
-    else:
-        load_dotenv()
+        load_dotenv(CONFIG_ENV, override=False)
 
     api_url = os.getenv("api_url")
     api_key = os.getenv("api_key")
@@ -73,6 +73,47 @@ def import_key():
 
     console.print(f"\n[green]Credentials saved to {CONFIG_ENV} (mode 600)[/]")
     console.print(f"API Key: ...{api_key[-4:]}")
+
+
+def show_api_key():
+    """Display the current API key from the global config (masked)."""
+    if not CONFIG_ENV.exists():
+        console.print("[yellow]No global config found.[/]")
+        console.print(f"Run [cyan]account --import-key[/] or [cyan]account --api-key KEY[/] to configure.")
+        return
+
+    load_dotenv(CONFIG_ENV)
+    api_key = os.getenv("api_key", "")
+    api_url = os.getenv("api_url", "")
+
+    if not api_key:
+        console.print("[yellow]No API key set in global config.[/]")
+        return
+
+    masked = f"...{api_key[-4:]}" if len(api_key) >= 4 else "***"
+    console.print(f"Config:  [dim]{CONFIG_ENV}[/]")
+    console.print(f"API URL: {api_url}")
+    console.print(f"API Key: {masked}")
+
+
+def set_api_key(new_key: str):
+    """Set or update the API key in the global config.
+
+    Args:
+        new_key: The new API key to save.
+    """
+    api_url = "https://api.network-audit.io"
+
+    if CONFIG_ENV.exists():
+        load_dotenv(CONFIG_ENV)
+        api_url = os.getenv("api_url", api_url)
+
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    CONFIG_ENV.write_text(f"api_url={api_url}\napi_key={new_key}\n")
+    CONFIG_ENV.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 600
+
+    masked = f"...{new_key[-4:]}" if len(new_key) >= 4 else "***"
+    console.print(f"[green]API key updated ({masked}) in {CONFIG_ENV}[/]")
 
 
 def _load_json_inventory(path: str) -> list[dict]:
