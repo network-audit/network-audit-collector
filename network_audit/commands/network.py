@@ -1,7 +1,9 @@
 """Cisco network device collector — SSH/Telnet, parse show version/inventory, check EOL/CVE."""
 
 import getpass
+import json
 import re
+import sys
 import socket
 import threading
 import time
@@ -16,7 +18,8 @@ from rich.table import Table
 
 from ..api import api_get
 from ..config import load_config, load_inventory
-from ..display import build_live_display, console, create_progress
+from .. import display as _display
+from ..display import build_live_display, create_progress
 from ..export import default_csv_path, export_csv
 from ..maintenance import wait_if_maintenance
 from ..ssh import create_ssh_client
@@ -378,25 +381,53 @@ def display_summary(results, csv_file):
             eol_display, cve_display, r["error"] or "",
         )
 
-    console.print()
-    console.print(table)
-    console.print()
-    console.print(Panel(
+    _display.console.print()
+    _display.console.print(table)
+    _display.console.print()
+    summary = (
         f"[bold]Total devices:[/] {total}  |  "
         f"[bold red]Errors:[/] {errors}  |  "
-        f"[bold red]EOL flagged:[/] {eol_flagged}  |  "
-        f"[bold]CSV:[/] {csv_file}",
-        title="Summary",
-    ))
+        f"[bold red]EOL flagged:[/] {eol_flagged}"
+    )
+    if csv_file:
+        summary += f"  |  [bold]CSV:[/] {csv_file}"
+    _display.console.print(Panel(summary, title="Summary"))
 
 
 # ---------------------------------------------------------------------------
 # Subcommand entry point
 # ---------------------------------------------------------------------------
 
+def _build_json_results(results):
+    """Build a JSON-serializable list from scan results."""
+    output = []
+    for r in results:
+        output.append({
+            "name": r["name"],
+            "host": r["host"],
+            "hostname": r["hostname"],
+            "model": r["model"],
+            "os_version": r["os_version"],
+            "eol_status": _extract_eol_status(r["eol"]),
+            "eol_details": _extract_eol_details(r["eol"]),
+            "cve_count": _extract_cve_count(r["cve"]),
+            "eol_raw": r["eol"] if isinstance(r["eol"], dict) else None,
+            "cve_raw": r["cve"] if isinstance(r["cve"], (dict, list)) else None,
+            "error": r["error"],
+        })
+    return output
+
+
 def run(args):
     """Run the network collector subcommand."""
-    console.print(Panel("[bold cyan]Network Audit Scan[/]\n[dim]Powered by network-audit.io[/]",
+    if args.no_rich:
+        from ..display import quiet_console
+        quiet_console()
+    elif args.json:
+        from ..display import redirect_console_to_stderr
+        redirect_console_to_stderr()
+
+    _display.console.print(Panel("[bold cyan]Network Audit Scan[/]\n[dim]Powered by network-audit.io[/]",
                         expand=False))
 
     api_url, api_key = load_config()
@@ -410,7 +441,7 @@ def run(args):
     status_lock = threading.Lock()
 
     try:
-        with Live(console=console, refresh_per_second=4) as live:
+        with Live(console=_display.console, refresh_per_second=4) as live:
             progress = create_progress()
             task_id = progress.add_task("Scanning devices...", total=len(inventory))
 
@@ -443,9 +474,18 @@ def run(args):
                     progress.advance(task_id)
                     live.update(build_live_display(progress, status_lines))
     except KeyboardInterrupt:
-        console.print("\n[yellow]Scan cancelled by user[/]")
+        _display.console.print("\n[yellow]Scan cancelled by user[/]")
         return
 
-    csv_file = args.output or default_csv_path("network")
-    export_csv(_build_csv_rows(results), FIELDNAMES, csv_file)
-    display_summary(results, csv_file)
+    if not args.no_csv:
+        csv_file = args.output or default_csv_path("network")
+        export_csv(_build_csv_rows(results), FIELDNAMES, csv_file)
+    else:
+        csv_file = None
+
+    if args.json:
+        json.dump(_build_json_results(results), sys.stdout, indent=2)
+        print()
+
+    if not args.no_rich and not args.json:
+        display_summary(results, csv_file)
