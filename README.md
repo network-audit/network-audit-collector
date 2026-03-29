@@ -2,9 +2,9 @@
 
 > If you run into any issues, please [open an issue](https://github.com/network-audit/network-audit-collector/issues), submit a PR, or send an email. The goal of this project is to help you get your time back.
 
-A CLI tool that scans your Cisco network devices and Linux hosts, then checks their EOL (End-of-Life) and CVE status against the [network-audit.io](https://network-audit.io) API.
+A CLI tool that scans your Cisco network devices, Linux hosts, and Windows machines, then checks their EOL (End-of-Life) and CVE status against the [network-audit.io](https://network-audit.io) API.
 
-Point it at an inventory file, give it credentials, and it will SSH (or Telnet) into each device, pull version info, and tell you what's end-of-life, what has known vulnerabilities, and what's approaching EOL. Results are displayed in a table and exported to CSV.
+Point it at an inventory file, give it credentials, and it will connect to each device, pull version info, and tell you what's end-of-life, what has known vulnerabilities, and what's approaching EOL. Optionally collect system info (CPU, memory, disk, uptime) and installed package versions for CVE scanning. Results are displayed in a table, exported to CSV, or output as JSON.
 
 ## Why uv?
 
@@ -37,21 +37,109 @@ uv run main.py linux -i linux-inv.json
 
 ## Usage
 
+### Linux
+
+```bash
+# Basic scan (defaults to current user + key auth)
+uv run main.py linux -i linux-inv.json
+
+# With password auth
+uv run main.py linux -u admin --ask-pass -i linux-inv.json
+
+# Sysinfo only, no API calls (offline mode)
+uv run main.py linux --sysinfo --no-api -c 10
+
+# Parallel scan with delay between connections
+uv run main.py linux -c 5 --delay 1
+```
+
+#### Linux flags
+
+| Flag | Description |
+|---|---|
+| `--sysinfo` | Collect CPU, memory, disk, and uptime |
+| `--no-api` | Skip all API calls (useful with `--sysinfo` for offline collection) |
+| `--json` | Output results as JSON to stdout |
+| `--no-csv` | Skip CSV file export |
+| `--no-rich` | Suppress Rich console output |
+| `--debug` | Print raw API responses |
+| `-c N` | Max concurrent SSH connections (default: 1) |
+| `--delay N` | Seconds between launching connections |
+
+### Windows
+
+```bash
+# Basic scan via WinRM (default)
+uv run main.py windows -u admin --ask-pass -i windows-inv.json
+
+# With sysinfo
+uv run main.py windows -u admin --ask-pass --sysinfo
+
+# WinRM over HTTPS
+uv run main.py windows -u admin --ask-pass --https
+
+# NTLM auth (for domain-joined hosts)
+uv run main.py windows -u admin --ask-pass --ntlm
+
+# SSH fallback (requires OpenSSH on target)
+uv run main.py windows -u admin --ask-pass --ssh
+
+# Sysinfo only, no API
+uv run main.py windows -u admin --ask-pass --sysinfo --no-api
+
+# JSON output
+uv run main.py windows -u admin --ask-pass --sysinfo --json --no-csv > results.json
+```
+
+#### Windows flags
+
+| Flag | Description |
+|---|---|
+| `--ssh` | Use SSH instead of WinRM |
+| `--https` | Use HTTPS for WinRM (port 5986 instead of 5985) |
+| `--ntlm` | Use NTLM auth instead of basic auth |
+| `--sysinfo` | Collect CPU, memory, disk, uptime |
+| `--no-api` | Skip EOL API lookups |
+| `--json` | Output results as JSON to stdout |
+| `--no-csv` | Skip CSV file export |
+| `--debug` | Print raw API responses |
+| `-c N` | Max concurrent connections (default: 1) |
+
+#### Windows version mapping
+
+The collector automatically maps Windows edition and version to the correct API slug:
+
+| Detected | API slug |
+|---|---|
+| Windows 10 Pro 22H2 | `windows/10-22h2` |
+| Windows 11 Enterprise 25H2 | `windows/11-25h2-e` |
+| Windows 10 IoT Enterprise | `windows/10-21h2-iot` |
+| Windows Server 2022 Standard | `windows-server/2022-ltsc` |
+| Windows Server 2019 (SAC 1809) | `windows-server/1809-sac` |
+
+The collector also detects the last installed Windows Update (excluding Defender definitions) via the Windows Update COM API.
+
+### Network (Cisco)
+
 ```bash
 # Scan Cisco devices via SSH
 uv run main.py network -u admin --ask-pass -i inv.json
 
 # Scan Cisco devices via Telnet
 uv run main.py network -u admin --ask-pass --telnet -i inv.json
+```
 
-# Scan Linux hosts (defaults to current user + key auth)
-uv run main.py linux -i linux-inv.json
+### Account and Status
 
-# Scan Linux hosts with password auth
-uv run main.py linux -u admin --ask-pass -i linux-inv.json
-
+```bash
 # Check your API account status
 uv run main.py account
+
+# Check API health
+uv run main.py status
+
+# JSON output for scripting
+uv run main.py status --json
 ```
 
 Run `uv run main.py <command> --help` for full flag details.
@@ -70,13 +158,6 @@ uv run main.py status
 │ API Key: Valid                                                               │
 │ Updated: 2026-03-17T19:15:00Z                                                │
 ╰──────────────────────────────────────────────────────────────────────────────╯
-                              Planned Maintenance
-┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Start                ┃ End                  ┃ Description                    ┃
-┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ 2026-03-21T09:00:00Z │ 2026-03-21T10:00:00Z │ Scheduled system patching and  │
-│                      │                      │ package updates                │
-└──────────────────────┴──────────────────────┴────────────────────────────────┘
 ```
 
 ### JSON output for scripting
@@ -138,7 +219,7 @@ Scanning host-02... ✔
 Scanning host-03... ✔
 ```
 
-No flags needed — this behavior is built in to both `linux` and `network` commands.
+No flags needed — this behavior is built in to the `linux`, `windows`, and `network` commands.
 
 ## Configuration
 
@@ -180,7 +261,7 @@ host,name
 ]
 ```
 
-The `host` column/key is required. `name` is optional and defaults to the host value if not provided.
+The `host` column/key is required. `name` is optional and defaults to the host value if not provided. Per-device username overrides are supported via the `username` key.
 
 See `examples/` for sample inventory files in both formats.
 
@@ -202,15 +283,44 @@ $ uv run main.py linux -i linux-inv.json
 ┃ Name       ┃ Host         ┃ Distro ┃ Version ┃ Codename     ┃ LTS ┃ EOL Status ┃ EOL Date   ┃ Days Left ┃
 ┡━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━┩
 │ web-server │ 192.168.1.10 │ ubuntu │ 24.04   │ Noble Numbat │ Yes │ Current    │ 2029-05-31 │      1177 │
-├────────────┼──────────────┼────────┼─────────┼──────────────┼─────┼────────────┼────────────┼───────────┤
 │ db-server  │ 192.168.1.11 │ debian │ 12      │ Bookworm     │ No  │ Warning    │ 2026-06-10 │        91 │
-├────────────┼──────────────┼────────┼─────────┼──────────────┼─────┼────────────┼────────────┼───────────┤
 │ legacy-app │ 192.168.1.12 │ centos │ 7       │              │ No  │ EOL        │ 2020-08-06 │   EXPIRED │
 └────────────┴──────────────┴────────┴─────────┴──────────────┴─────┴────────────┴────────────┴───────────┘
 
-╭────────────────────────────────────────────────────── Summary ───────────────────────────────────────────────────────╮
-│ Total hosts: 3  |  Errors: 0  |  EOL: 1  |  Warning: 1  |  CSV: data/2026-03-10_linux.csv                            │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭──────────────────────────────── Summary ─────────────────────────────────╮
+│ Total hosts: 3  |  Errors: 0  |  EOL: 1  |  Warning: 1                  │
+╰──────────────────────────────────────────────────────────────────────────╯
+```
+
+### Windows Scan
+
+```
+$ uv run main.py windows -u admin --ask-pass --sysinfo --json --no-csv
+[
+  {
+    "name": "win10-dockur",
+    "product": "Windows 10",
+    "version": "22H2",
+    "edition": "Pro",
+    "build": "19045",
+    "product_slug": "windows",
+    "version_slug": "10-22h2",
+    "last_patch_kb": "KB5020683",
+    "last_patch_date": "2026-03-18",
+    "eol_status": "eol",
+    "eol_date": "2025-10-14",
+    "is_eol": true,
+    "sysinfo": {
+      "cpu": "AMD Ryzen 7 5800X3D 8-Core Processor",
+      "cores": 2,
+      "memory_total_mb": 8187,
+      "memory_used_mb": 3228,
+      "disk_total_mb": 40702,
+      "disk_used_mb": 15494,
+      "uptime": "4d 0h 26m"
+    }
+  }
+]
 ```
 
 ### Network Scan (Cisco)
@@ -227,15 +337,13 @@ $ uv run main.py network -u admin --ask-pass -i inv.json
 ┃ Name        ┃ Host        ┃ Hostname ┃ Model             ┃ OS Version ┃ EOL Status ┃ CVEs ┃
 ┡━━━━━━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━┩
 │ core-switch │ 192.168.1.1 │ CORE-SW  │ WS-C3750X-48T-S   │ 15.2(4)E10 │ EOL        │ 20   │
-├─────────────┼─────────────┼──────────┼───────────────────┼────────────┼────────────┼──────┤
 │ dist-switch │ 192.168.1.2 │ DIST-SW  │ WS-C2960X-48FPS-L │ 15.2(7)E7  │ Current    │ 24   │
-├─────────────┼─────────────┼──────────┼───────────────────┼────────────┼────────────┼──────┤
 │ edge-router │ 192.168.1.3 │ EDGE-RTR │ CISCO1921/K9      │ 15.7(3)M6  │ EOL        │ 21   │
 └─────────────┴─────────────┴──────────┴───────────────────┴────────────┴────────────┴──────┘
 
-╭────────────────────────────────────────────────────── Summary ───────────────────────────────────────────────────────╮
-│ Total devices: 3  |  Errors: 0  |  EOL flagged: 2  |  CSV: data/2026-03-10_network.csv                               │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭──────────────────────────────── Summary ─────────────────────────────────╮
+│ Total devices: 3  |  Errors: 0  |  EOL flagged: 2                        │
+╰──────────────────────────────────────────────────────────────────────────╯
 ```
 
 ### CSV Output
@@ -248,6 +356,21 @@ web-server,192.168.1.10,ubuntu,24.04,Noble Numbat,True,current,2029-05-31,1177,
 db-server,192.168.1.11,debian,12,Bookworm,False,warning,2026-06-10,91,
 legacy-app,192.168.1.12,centos,7,,False,eol,2020-08-06,-2043,
 ```
+
+## Grafana Dashboard
+
+A sample Grafana dashboard is included in `examples/grafana-dashboard.json`. It visualizes fleet EOL status, CVE counts, memory/disk usage, and uptime from scan data.
+
+To try it out:
+
+1. Run a scan and save as JSON:
+   ```bash
+   uv run main.py linux --sysinfo --json --no-csv -c 5 > scan.json
+   ```
+
+2. Import `examples/grafana-dashboard.json` into Grafana with a TestData datasource using CSV content from `examples/grafana-sample-data.csv`.
+
+Sample data is included in `examples/grafana-sample-data.json` and `examples/grafana-sample-data.csv`.
 
 ## Installing with pip
 
@@ -264,4 +387,6 @@ python main.py linux -i linux-inv.json
 
 This tool is a client for the [network-audit.io](https://network-audit.io) API. You'll need an API key to use it. Sign up at [network-audit.io](https://network-audit.io) to get one.
 
-The API provides EOL lifecycle data for Cisco hardware and Linux distributions, plus CVE lookups for Cisco devices by model and IOS version.
+The API provides:
+- EOL lifecycle data for Cisco hardware, Linux distributions, and Windows editions
+- CVE lookups for Cisco devices by model and IOS version

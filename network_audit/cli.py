@@ -64,13 +64,7 @@ def main():
     linux_parser.add_argument("--no-csv", action="store_true", default=True, help="Skip CSV file export")
     linux_parser.add_argument("--no-rich", action="store_true", default=True, help="Suppress Rich console output (banner, progress, table)")
     linux_parser.add_argument(
-        "--patched", action="store_true", help="Check last patched date on each host"
-    )
-    linux_parser.add_argument(
         "--sysinfo", action="store_true", help="Collect CPU, memory, storage, and uptime"
-    )
-    linux_parser.add_argument(
-        "--cve", action="store_true", help="Check installed packages for known CVEs (implies --sysinfo)"
     )
     linux_parser.add_argument(
         "--no-api", action="store_true", help="Skip EOL API lookups (useful with --sysinfo)"

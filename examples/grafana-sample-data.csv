@@ -1,0 +1,16 @@
+name,host,os_type,os,release,pretty_name,eol_status,eol_date,is_eol,last_patched,cpu,cores,memory_total_mb,memory_used_mb,disk_total_mb,disk_used_mb,uptime,uptime_secs,total_cves,cves_high,cves_medium,cves_low,kernel,openssh,curl
+dns,192.168.1.10,linux,debian 13,trixie,Debian GNU/Linux 13 (trixie),Not Found,,False,2026-03-19,AMD Ryzen 7,1,1974,446,19953,2615,30d 21h 3m,2667826,11,1,9,1,6.12.73,10.0p2,8.14.1
+gateway,192.168.1.10,linux,debian 13,trixie,Debian GNU/Linux 13 (trixie),Not Found,,False,2026-03-19,AMD Ryzen 7,1,1974,556,19953,5630,30d 21h 3m,2667823,11,1,9,1,6.12.73,10.0p2,8.14.1
+vpn,192.168.1.10,linux,debian 13,trixie,Debian GNU/Linux 13 (trixie),Not Found,,False,2026-03-19,AMD Ryzen 7,1,1974,376,19953,3404,30d 21h 3m,2667826,11,1,9,1,6.12.73,10.0p2,8.14.1
+monitoring,192.168.1.10,linux,debian 13,trixie,Debian GNU/Linux 13 (trixie),Not Found,,False,2026-03-19,AMD Ryzen 7,2,3922,1107,30033,6326,24d 9h 21m,2107278,11,1,9,1,6.12.73,10.0p2,8.14.1
+proxmox,192.168.1.10,linux,proxmox 9,,Proxmox VE 9.1.2,Not Found,,False,2025-12-15,AMD Ryzen 7,16,60140,41513,785530,20648,97d 7h 54m,8409255,14,2,11,1,6.17.2,10.0p2,8.14.1
+docker,192.168.1.10,linux,debian 13,trixie,Debian GNU/Linux 13 (trixie),Not Found,,False,2026-03-20,AMD Ryzen 7,4,15999,2570,40111,12615,30d 21h 3m,2667823,11,1,9,1,6.12.73,10.0p2,8.14.1
+automation,192.168.1.10,linux,debian 13,trixie,Debian GNU/Linux 13 (trixie),Not Found,,False,2026-03-19,AMD Ryzen 7,1,1974,436,19953,3081,30d 21h 3m,2667818,11,1,9,1,6.12.73,10.0p2,8.14.1
+gitea,192.168.1.10,linux,debian 13,trixie,Debian GNU/Linux 13 (trixie),Not Found,,False,2026-03-20,AMD Ryzen 7,1,1974,559,19953,2713,28d 6h 27m,2442446,11,1,9,1,6.12.73,10.0p2,8.14.1
+postgres,192.168.1.10,linux,debian 13,trixie,Debian GNU/Linux 13 (trixie),Not Found,,False,2026-03-19,AMD Ryzen 7,1,1974,469,19953,3754,30d 21h 3m,2667820,11,1,9,1,6.12.73,10.0p2,8.14.1
+wiki,192.168.1.10,linux,debian 13,trixie,Debian GNU/Linux 13 (trixie),Not Found,,False,2026-03-19,AMD Ryzen 7,1,1974,393,19953,1963,29d 20h 54m,2580862,11,1,9,1,6.12.73,10.0p2,8.14.1
+sinkhole,192.168.1.10,linux,debian 13,trixie,Debian GNU/Linux 13 (trixie),Not Found,,False,2026-03-19,AMD Ryzen 7,1,1974,277,19953,1447,29d 20h 54m,2580860,11,1,9,1,6.12.73,10.0p2,8.14.1
+factorio,192.168.1.10,linux,debian 13,trixie,Debian GNU/Linux 13 (trixie),Not Found,,False,2026-03-19,AMD Ryzen 7,1,1974,292,19953,1924,29d 20h 54m,2580861,11,1,9,1,6.12.73,10.0p2,8.14.1
+claw,192.168.1.10,linux,Unknown Unknown,,Unknown,n/a,,False,,,0,0,0,0,0,,0,0,0,0,0,,,
+win10-dockur,192.168.1.20,windows,Windows 10 22H2,Pro,Microsoft Windows 10 Pro,eol,2025-10-14,True,2026-03-18,AMD Ryzen 7,2,8187,3228,40702,15494,4d 0h 26m,347211,0,0,0,0,19045,,
+win11-dockur,192.168.1.21,windows,Windows 11 25H2,Pro,Microsoft Windows 11 Pro,current,2028-10-10,False,,AMD Ryzen 7,2,8187,3319,39962,19276,23m,1413,0,0,0,0,26200,,

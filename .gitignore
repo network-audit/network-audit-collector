@@ -28,3 +28,10 @@ results.csv
 .project.md
 CLAUDE.md
 AGENTS.md
+
+# Real scan output (use examples/ for reference)
+*_cve_*.json
+*_dockur_*.json
+
+# Grafana demo
+grafana-demo/
