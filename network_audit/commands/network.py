@@ -17,7 +17,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from ..api import api_get
-from ..config import load_config, load_inventory
+from ..config import load_config, load_inventory, resolve_dev_url
 from .. import display as _display
 from ..display import build_live_display, create_progress
 from ..export import default_csv_path, export_csv
@@ -29,11 +29,23 @@ from ..ssh import create_ssh_client
 # SSH Collection
 # ---------------------------------------------------------------------------
 
+def _parse_host_port(host, default_port=22):
+    """Split host into (hostname, port), supporting host:port notation."""
+    if ":" in host:
+        parts = host.rsplit(":", 1)
+        try:
+            return parts[0], int(parts[1])
+        except ValueError:
+            pass
+    return host, default_port
+
+
 def ssh_collect(host, username, password, timeout):
     """SSH into a Cisco device and return raw show version + show inventory output."""
+    hostname, port = _parse_host_port(host)
     client = create_ssh_client()
     try:
-        client.connect(host, username=username, password=password,
+        client.connect(hostname, port=port, username=username, password=password,
                        timeout=timeout, look_for_keys=False, allow_agent=False)
         shell = client.invoke_shell()
         time.sleep(1)
@@ -158,36 +170,137 @@ def telnet_collect(host, username, password, timeout):
 # ---------------------------------------------------------------------------
 
 def parse_show_version(output):
-    """Parse show version output → {hostname, model, os_version}."""
-    result = {"hostname": "Unknown", "model": "Unknown", "os_version": "Unknown"}
+    """Parse show version output → {hostname, model, os_version}.
 
-    # Hostname: prompt line or uptime line
-    m = re.search(r"(\S+)\s+uptime is", output)
-    if m:
-        result["hostname"] = m.group(1)
+    Supports Cisco IOS/IOS-XE/NX-OS/ASA/WLC/AireOS, Arista EOS,
+    and Juniper JunOS.
+    """
+    result = {"hostname": "Unknown", "model": "Unknown", "os_version": "Unknown", "vendor": "cisco"}
+
+    # --- Detect vendor ---
+    is_arista = "Arista" in output
+    is_juniper = "Junos:" in output or "JUNOS" in output
+    is_asa = "Adaptive Security Appliance" in output and "Firepower" not in output
+    is_ftd = "Firepower" in output or "FPR" in output
+    is_aireos = "AireOS" in output
+    is_iosxr = "IOS XR" in output
+
+    if is_arista:
+        result["vendor"] = "arista"
+    elif is_juniper:
+        result["vendor"] = "juniper"
+
+    # --- Hostname ---
+    if is_juniper:
+        m = re.search(r"^Hostname:\s*(\S+)", output, re.MULTILINE)
+        if m:
+            result["hostname"] = m.group(1)
+    elif is_ftd:
+        # FTD: "---[ hostname ]---" or "hostname up N days"
+        m = re.search(r"---+\[\s*(\S+)\s*\]---+", output)
+        if not m:
+            m = re.search(r"^(\S+)\s+up\s+\d+", output, re.MULTILINE)
+        if m:
+            result["hostname"] = m.group(1)
+    elif is_asa:
+        # ASA: "hostname up 312 days..."
+        m = re.search(r"^(\S+)\s+up\s+\d+", output, re.MULTILINE)
+        if m:
+            result["hostname"] = m.group(1)
+    elif is_iosxr:
+        # IOS-XR: "System uptime is..." — hostname from prompt
+        pass
+    elif is_aireos:
+        m = re.search(r"System Name\.*\s+(\S+)", output)
+        if m:
+            result["hostname"] = m.group(1)
     else:
+        m = re.search(r"(\S+)\s+uptime is", output)
+        if m:
+            result["hostname"] = m.group(1)
+    # Fallback: prompt line
+    if result["hostname"] == "Unknown":
         m = re.search(r"^(\S+)[#>]", output, re.MULTILINE)
         if m:
             result["hostname"] = m.group(1)
 
-    # OS Version
-    m = re.search(r"Cisco IOS.*?Version\s+([\S]+?),", output)
-    if m:
-        result["os_version"] = m.group(1)
-    else:
-        m = re.search(r"(?:NXOS|NX-OS).*?[Vv]ersion\s+([\S]+)", output)
+    # --- OS Version ---
+    if is_arista:
+        m = re.search(r"Software image version:\s*(\S+)", output)
         if m:
             result["os_version"] = m.group(1)
-
-    # Model — priority 1: "Model number" field (IOS switches)
-    m = re.search(r"[Mm]odel\s+[Nn]umber\s*:\s*(\S+)", output)
-    if m:
-        result["model"] = m.group(1)
+    elif is_juniper:
+        m = re.search(r"^Junos:\s*(\S+)", output, re.MULTILINE)
+        if m:
+            result["os_version"] = m.group(1)
+    elif is_ftd:
+        # FTD: "Version X.Y.Z (Build NN)" or fallback to ASA version line
+        m = re.search(r"Version\s+(\d+\.\d+\.\d+)\s+\(Build", output)
+        if not m:
+            m = re.search(r"Adaptive Security Appliance Software Version\s+(\S+)", output)
+        if m:
+            result["os_version"] = m.group(1)
+    elif is_asa:
+        m = re.search(r"Adaptive Security Appliance Software Version\s+(\S+)", output)
+        if m:
+            result["os_version"] = m.group(1)
+    elif is_iosxr:
+        m = re.search(r"Cisco IOS XR Software, Version\s+(\S+)", output)
+        if m:
+            result["os_version"] = m.group(1)
+    elif is_aireos:
+        m = re.search(r"Product Version\s+(\S+)", output)
+        if m:
+            result["os_version"] = m.group(1)
     else:
-        # Priority 2: hardware line — "cisco MODEL (...) processor/with"
+        m = re.search(r"Cisco IOS.*?Version\s+([\S]+?),", output)
+        if m:
+            result["os_version"] = m.group(1)
+        else:
+            m = re.search(r"(?:NXOS|NX-OS).*?[Vv]ersion\s+([\S]+)", output)
+            if m:
+                result["os_version"] = m.group(1)
+
+    # --- Model ---
+    if is_arista:
+        # "Arista DCS-7050SX3-48YC12" or "Arista vEOS"
+        m = re.search(r"Arista\s+(?:DCS-)?(\S+)", output)
+        if m:
+            result["model"] = m.group(1)
+    elif is_juniper:
+        m = re.search(r"^Model:\s*(\S+)", output, re.MULTILINE)
+        if m:
+            result["model"] = m.group(1)
+    elif is_ftd:
+        # FTD: "Model : Cisco Firepower FPR-4120" or "Hardware: FPR-4120,"
+        m = re.search(r"Model\s*:\s*Cisco Firepower\s+(\S+)", output)
+        if not m:
+            m = re.search(r"Hardware:\s*(\S+),", output)
+        if m:
+            result["model"] = m.group(1)
+    elif is_asa:
+        # "Hardware:   ASA5525-X, 8192 MB RAM"
+        m = re.search(r"Hardware:\s*(\S+),", output)
+        if m:
+            result["model"] = m.group(1)
+    elif is_iosxr:
+        # "cisco ASR-9006-AC () processor"
         m = re.search(r"[Cc]isco\s+([\w/-]+)\s+\(", output)
         if m:
             result["model"] = m.group(1)
+    elif is_aireos:
+        m = re.search(r"Model Number\.*\s+(\S+)", output)
+        if m:
+            result["model"] = m.group(1)
+    else:
+        # Cisco IOS/IOS-XE/NX-OS
+        m = re.search(r"[Mm]odel\s+[Nn]umber\s*:\s*(\S+)", output)
+        if m:
+            result["model"] = m.group(1)
+        else:
+            m = re.search(r"[Cc]isco\s+([\w/-]+)\s+\(", output)
+            if m:
+                result["model"] = m.group(1)
 
     return result
 
@@ -202,19 +315,35 @@ def parse_show_inventory(output):
 # API Queries
 # ---------------------------------------------------------------------------
 
-def query_eol(api_url, api_key, model):
-    """GET /api/v1/eol/cisco/{model} → EOL data dict or error string."""
+# Map detected vendor names to API vendor path segments.
+# EOL and CVE databases may use different vendor strings.
+_VENDOR_EOL_MAP = {
+    "cisco": "cisco",
+    "arista": "arista",
+    "juniper": "juniper",
+}
+_VENDOR_CVE_MAP = {
+    "cisco": "cisco",
+    "arista": "arista networks",
+    "juniper": "juniper networks",
+}
+
+
+def query_eol(api_url, api_key, vendor, model):
+    """GET /api/v1/eol/{vendor}/{model} → EOL data dict or error string."""
+    v = _VENDOR_EOL_MAP.get(vendor, vendor)
     return api_get(api_url, api_key,
-                   f"/api/v1/eol/cisco/{quote(model, safe='')}")
+                   f"/api/v1/eol/{quote(v, safe='')}/{quote(model, safe='')}")
 
 
-def query_cve(api_url, api_key, model, os_version=None):
-    """GET /api/v1/cve/cisco/{model}?os_version=... → CVE data dict or error string."""
+def query_cve(api_url, api_key, vendor, model, os_version=None):
+    """GET /api/v1/cve/{vendor}/{model}?os_version=... → CVE data dict or error string."""
+    v = _VENDOR_CVE_MAP.get(vendor, vendor)
     params = {}
     if os_version and os_version != "Unknown":
         params["os_version"] = os_version
     return api_get(api_url, api_key,
-                   f"/api/v1/cve/cisco/{quote(model, safe='')}",
+                   f"/api/v1/cve/{quote(v, safe='')}/{quote(model, safe='')}",
                    params=params or None)
 
 
@@ -228,6 +357,7 @@ def scan_device(device, username, password, timeout, api_url, api_key, use_telne
         "name": device["name"],
         "host": device["host"],
         "hostname": "Unknown",
+        "vendor": "cisco",
         "model": "Unknown",
         "os_version": "Unknown",
         "eol": None,
@@ -243,6 +373,7 @@ def scan_device(device, username, password, timeout, api_url, api_key, use_telne
             ver_out, inv_out = ssh_collect(device["host"], username, password, timeout)
         parsed = parse_show_version(ver_out)
         result["hostname"] = parsed["hostname"]
+        result["vendor"] = parsed["vendor"]
         result["model"] = parsed["model"]
         result["os_version"] = parsed["os_version"]
 
@@ -257,8 +388,18 @@ def scan_device(device, username, password, timeout, api_url, api_key, use_telne
 
     # API calls (skip if model unknown)
     if result["model"] != "Unknown":
-        result["eol"] = query_eol(api_url, api_key, result["model"])
-        result["cve"] = query_cve(api_url, api_key, result["model"], result["os_version"])
+        result["eol"] = query_eol(api_url, api_key, result["vendor"], result["model"])
+        # Juniper/Arista CVEs are indexed by OS name, not hardware model.
+        # Don't pass os_version — their version-based index uses different formats.
+        cve_model = result["model"]
+        cve_version = result["os_version"]
+        if result["vendor"] == "juniper":
+            cve_model = "junos"
+            cve_version = None
+        elif result["vendor"] == "arista":
+            cve_model = "eos"
+            cve_version = None
+        result["cve"] = query_cve(api_url, api_key, result["vendor"], cve_model, cve_version)
 
     return result
 
@@ -274,7 +415,17 @@ def _extract_eol_status(eol_data):
         return eol_data
     if isinstance(eol_data, dict):
         data = eol_data.get("data", eol_data)
-        return data.get("status", "Unknown")
+        # Prefer is_eol boolean (accounts for end-of-sale, not just last_support)
+        if data.get("is_eol"):
+            return "EOL"
+        status = data.get("status", "Unknown")
+        if status == "current":
+            return "Active"
+        if status == "warning":
+            return "EOL Warning"
+        if status == "eol":
+            return "EOL"
+        return status
     return "Unknown"
 
 
@@ -332,8 +483,86 @@ FIELDNAMES = ["name", "host", "hostname", "model", "os_version",
 # Rich Display
 # ---------------------------------------------------------------------------
 
+def _display_condensed_summary(results, csv_file):
+    """Show a grouped summary instead of per-device table (for >10 results)."""
+    total = len(results)
+    errors = sum(1 for r in results if r["error"])
+    by_status = {"eol": 0, "active": 0, "other": 0, "error": 0}
+    total_cves = 0
+    by_model: dict[str, dict] = {}
+
+    for r in results:
+        eol_status = _extract_eol_status(r["eol"])
+        cve_count = _extract_cve_count(r["cve"])
+        total_cves += cve_count
+
+        if r["error"]:
+            by_status["error"] += 1
+        elif eol_status.lower() == "eol":
+            by_status["eol"] += 1
+        elif eol_status.lower() == "active":
+            by_status["active"] += 1
+        else:
+            by_status["other"] += 1
+
+        key = r["model"] or "Unknown"
+        if key not in by_model:
+            by_model[key] = {"count": 0, "eol": 0, "cves": 0}
+        by_model[key]["count"] += 1
+        if eol_status.lower() == "eol":
+            by_model[key]["eol"] += 1
+        by_model[key]["cves"] += cve_count
+
+    # --- Status breakdown ---
+    status_table = Table(title="Network Audit Results", show_lines=False)
+    status_table.add_column("Status")
+    status_table.add_column("Devices", justify="right")
+    if by_status["eol"]:
+        status_table.add_row("[bold red]EOL[/bold red]", str(by_status["eol"]))
+    if by_status["active"]:
+        status_table.add_row("[green]Active[/green]", str(by_status["active"]))
+    if by_status["other"]:
+        status_table.add_row("[dim]Other[/dim]", str(by_status["other"]))
+    if by_status["error"]:
+        status_table.add_row("[red]Error[/red]", str(by_status["error"]))
+
+    _display.console.print()
+    _display.console.print(status_table)
+
+    # --- Top issues (models with EOL or high CVEs) ---
+    issues = {k: v for k, v in by_model.items() if v["eol"] > 0 or v["cves"] >= 5}
+    if issues:
+        issue_table = Table(title="Top Issues", show_lines=False)
+        issue_table.add_column("Model", style="magenta")
+        issue_table.add_column("Devices", justify="right")
+        issue_table.add_column("EOL", justify="right")
+        issue_table.add_column("CVEs", justify="right")
+        for model, info in sorted(issues.items(), key=lambda x: (-x[1]["eol"], -x[1]["cves"])):
+            eol_str = f"[bold red]{info['eol']}[/bold red]" if info["eol"] else "[dim]0[/dim]"
+            cve_str = f"[bold red]{info['cves']}[/bold red]" if info["cves"] >= 5 else str(info["cves"])
+            issue_table.add_row(model, str(info["count"]), eol_str, cve_str)
+        _display.console.print()
+        _display.console.print(issue_table)
+
+    _display.console.print()
+    summary = (
+        f"[bold]Total devices:[/] {total}  |  "
+        f"[bold red]Errors:[/] {errors}  |  "
+        f"[bold red]EOL flagged:[/] {by_status['eol']}  |  "
+        f"[bold red]CVEs:[/] {total_cves}"
+    )
+    if csv_file:
+        summary += f"  |  [bold]CSV:[/] {csv_file}"
+    else:
+        summary += "  |  [dim]Use --json for full output[/dim]"
+    _display.console.print(Panel(summary, title="Summary"))
+
+
 def display_summary(results, csv_file):
     """Print a Rich summary table and footer stats."""
+    if len(results) > 10:
+        return _display_condensed_summary(results, csv_file)
+
     table = Table(title="Network Audit Results", show_lines=False)
     table.add_column("Name", style="cyan")
     table.add_column("Host", style="dim")
@@ -420,17 +649,24 @@ def _build_json_results(results):
 
 def run(args):
     """Run the network collector subcommand."""
-    if args.no_rich:
-        from ..display import quiet_console
-        quiet_console()
-    elif args.json:
+    # --json implies no Rich output and no CSV (clean stdout)
+    if args.json:
+        args.no_rich = True
+        args.no_csv = True
+
+    if args.json:
         from ..display import redirect_console_to_stderr
         redirect_console_to_stderr()
+    elif args.no_rich:
+        from ..display import quiet_console
+        quiet_console()
 
     _display.console.print(Panel("[bold cyan]Network Audit Scan[/]\n[dim]Powered by network-audit.io[/]",
                         expand=False))
 
     api_url, api_key = load_config()
+    if getattr(args, "dev", None):
+        api_url = resolve_dev_url(args.dev)
     inventory = load_inventory(args.inventory)
 
     proto = "Telnet" if args.telnet else "SSH"

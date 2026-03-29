@@ -2,7 +2,7 @@
 
 > If you run into any issues, please [open an issue](https://github.com/network-audit/network-audit-collector/issues), submit a PR, or send an email. The goal of this project is to help you get your time back.
 
-A CLI tool that scans your Cisco network devices, Linux hosts, and Windows machines, then checks their EOL (End-of-Life) and CVE status against the [network-audit.io](https://network-audit.io) API.
+A CLI tool that scans your Cisco network devices and Linux hosts, then checks their EOL (End-of-Life) and CVE status against the [network-audit.io](https://network-audit.io) API.
 
 Point it at an inventory file, give it credentials, and it will connect to each device, pull version info, and tell you what's end-of-life, what has known vulnerabilities, and what's approaching EOL. Optionally collect system info (CPU, memory, disk, uptime) and installed package versions for CVE scanning. Results are displayed in a table, exported to CSV, or output as JSON.
 
@@ -65,59 +65,6 @@ uv run main.py linux -c 5 --delay 1
 | `--debug` | Print raw API responses |
 | `-c N` | Max concurrent SSH connections (default: 1) |
 | `--delay N` | Seconds between launching connections |
-
-### Windows
-
-```bash
-# Basic scan via WinRM (default)
-uv run main.py windows -u admin --ask-pass -i windows-inv.json
-
-# With sysinfo
-uv run main.py windows -u admin --ask-pass --sysinfo
-
-# WinRM over HTTPS
-uv run main.py windows -u admin --ask-pass --https
-
-# NTLM auth (for domain-joined hosts)
-uv run main.py windows -u admin --ask-pass --ntlm
-
-# SSH fallback (requires OpenSSH on target)
-uv run main.py windows -u admin --ask-pass --ssh
-
-# Sysinfo only, no API
-uv run main.py windows -u admin --ask-pass --sysinfo --no-api
-
-# JSON output
-uv run main.py windows -u admin --ask-pass --sysinfo --json --no-csv > results.json
-```
-
-#### Windows flags
-
-| Flag | Description |
-|---|---|
-| `--ssh` | Use SSH instead of WinRM |
-| `--https` | Use HTTPS for WinRM (port 5986 instead of 5985) |
-| `--ntlm` | Use NTLM auth instead of basic auth |
-| `--sysinfo` | Collect CPU, memory, disk, uptime |
-| `--no-api` | Skip EOL API lookups |
-| `--json` | Output results as JSON to stdout |
-| `--no-csv` | Skip CSV file export |
-| `--debug` | Print raw API responses |
-| `-c N` | Max concurrent connections (default: 1) |
-
-#### Windows version mapping
-
-The collector automatically maps Windows edition and version to the correct API slug:
-
-| Detected | API slug |
-|---|---|
-| Windows 10 Pro 22H2 | `windows/10-22h2` |
-| Windows 11 Enterprise 25H2 | `windows/11-25h2-e` |
-| Windows 10 IoT Enterprise | `windows/10-21h2-iot` |
-| Windows Server 2022 Standard | `windows-server/2022-ltsc` |
-| Windows Server 2019 (SAC 1809) | `windows-server/1809-sac` |
-
-The collector also detects the last installed Windows Update (excluding Defender definitions) via the Windows Update COM API.
 
 ### Network (Cisco)
 
@@ -219,7 +166,7 @@ Scanning host-02... ✔
 Scanning host-03... ✔
 ```
 
-No flags needed — this behavior is built in to the `linux`, `windows`, and `network` commands.
+No flags needed — this behavior is built in to the `linux` and `network` commands.
 
 ## Configuration
 
@@ -292,37 +239,6 @@ $ uv run main.py linux -i linux-inv.json
 ╰──────────────────────────────────────────────────────────────────────────╯
 ```
 
-### Windows Scan
-
-```
-$ uv run main.py windows -u admin --ask-pass --sysinfo --json --no-csv
-[
-  {
-    "name": "win10-dockur",
-    "product": "Windows 10",
-    "version": "22H2",
-    "edition": "Pro",
-    "build": "19045",
-    "product_slug": "windows",
-    "version_slug": "10-22h2",
-    "last_patch_kb": "KB5020683",
-    "last_patch_date": "2026-03-18",
-    "eol_status": "eol",
-    "eol_date": "2025-10-14",
-    "is_eol": true,
-    "sysinfo": {
-      "cpu": "AMD Ryzen 7 5800X3D 8-Core Processor",
-      "cores": 2,
-      "memory_total_mb": 8187,
-      "memory_used_mb": 3228,
-      "disk_total_mb": 40702,
-      "disk_used_mb": 15494,
-      "uptime": "4d 0h 26m"
-    }
-  }
-]
-```
-
 ### Network Scan (Cisco)
 
 ```
@@ -388,5 +304,10 @@ python main.py linux -i linux-inv.json
 This tool is a client for the [network-audit.io](https://network-audit.io) API. You'll need an API key to use it. Sign up at [network-audit.io](https://network-audit.io) to get one.
 
 The API provides:
-- EOL lifecycle data for Cisco hardware, Linux distributions, and Windows editions
+- EOL lifecycle data for Cisco hardware and Linux distributions
 - CVE lookups for Cisco devices by model and IOS version
+
+## Coming Soon
+
+- Webhook management
+- Windows Server and Desktop scanning

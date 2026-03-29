@@ -45,7 +45,7 @@ def _check_maintenance(maintenance: list[dict]) -> tuple[bool, str | None]:
 def run(args: object) -> None:
     """Run the status subcommand."""
     api_url, api_key = load_config()
-    use_json = getattr(args, "json", False)
+    use_json = getattr(args, "json", False) and not getattr(args, "rich", False)
 
     # --- Fetch platform status (public endpoint) ---
     try:

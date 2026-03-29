@@ -9,6 +9,28 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+
+_DEV_TARGETS = {
+    "dev": "https://api.network-audit.dev",
+    "local": "http://127.0.0.1:5004",
+}
+
+
+def resolve_dev_url(target: str) -> str:
+    """Resolve a --dev target to an API URL.
+
+    Args:
+        target: 'dev', 'local', an IP, or a full URL.
+
+    Returns:
+        Resolved API URL string.
+    """
+    if target in _DEV_TARGETS:
+        return _DEV_TARGETS[target]
+    if target.startswith(("http://", "https://")):
+        return target.rstrip("/")
+    return f"http://{target}"
+
 from .display import console
 
 CONFIG_DIR = Path.home() / ".config" / "network-audit-collector"

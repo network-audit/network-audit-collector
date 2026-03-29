@@ -37,7 +37,14 @@ def ssh_connect(host, username, password, timeout, use_keys=False):
         paramiko.SSHException: If SSH protocol fails.
     """
     client = create_ssh_client()
-    connect_kwargs = dict(hostname=host, username=username, timeout=timeout)
+    hostname, port = host, 22
+    if ":" in host:
+        parts = host.rsplit(":", 1)
+        try:
+            hostname, port = parts[0], int(parts[1])
+        except ValueError:
+            pass
+    connect_kwargs = dict(hostname=hostname, port=port, username=username, timeout=timeout)
 
     if password:
         connect_kwargs["password"] = password

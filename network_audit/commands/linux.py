@@ -14,7 +14,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from ..api import api_get
-from ..config import load_config, load_inventory
+from ..config import load_config, load_inventory, resolve_dev_url
 from .. import display as _display
 from ..display import build_live_display, create_progress
 from ..export import default_csv_path, export_csv
@@ -152,8 +152,20 @@ def _format_uptime(secs):
 # API Queries
 # ---------------------------------------------------------------------------
 
+# Distros whose EOL data is tracked by major version only.
+_MAJOR_VERSION_DISTROS = {"rhel", "rocky", "almalinux", "oraclelinux", "centos"}
+
+
+def _normalize_version(distro, version):
+    """Normalize version for API lookup (e.g. '8.10' → '8' for RHEL-family)."""
+    if distro in _MAJOR_VERSION_DISTROS and "." in version:
+        return version.split(".")[0]
+    return version
+
+
 def query_distro_version(api_url, api_key, distro, version):
     """GET /api/v1/linux/distro/{distro}/{version} → release detail or error string."""
+    version = _normalize_version(distro, version)
     return api_get(api_url, api_key,
                    f"/api/v1/linux/distro/{quote(distro, safe='')}/{quote(version, safe='')}")
 
@@ -248,7 +260,93 @@ def _build_csv_rows(results):
 # Rich Display
 # ---------------------------------------------------------------------------
 
+def _classify_eol(r):
+    """Return a normalized EOL status string for a linux result."""
+    eol_status = r["eol_status"] or "N/A"
+    if r["error"]:
+        return "error"
+    if eol_status.lower() == "eol" or r.get("is_eol"):
+        return "eol"
+    if eol_status.lower() == "warning":
+        return "warning"
+    if eol_status.lower() in ("current", "active", "supported"):
+        return "current"
+    if eol_status == "Not Found":
+        return "not_found"
+    return "unknown"
+
+
+def _display_condensed_summary(results, csv_file):
+    """Show a grouped summary instead of per-device table (for >10 results)."""
+    total = len(results)
+    errors = sum(1 for r in results if r["error"])
+    by_status = {"eol": 0, "warning": 0, "current": 0, "not_found": 0, "unknown": 0, "error": 0}
+    by_distro: dict[str, dict] = {}
+
+    for r in results:
+        status = _classify_eol(r)
+        by_status[status] += 1
+
+        key = f"{r['distro']} {r['version']}"
+        if key not in by_distro:
+            by_distro[key] = {"count": 0, "status": status, "eol_date": r["eol_date"] or "", "days": r["days_until_eol"]}
+        by_distro[key]["count"] += 1
+
+    # --- Status breakdown ---
+    status_table = Table(title="Linux Audit Results", show_lines=False)
+    status_table.add_column("Status")
+    status_table.add_column("Hosts", justify="right")
+    if by_status["eol"]:
+        status_table.add_row("[bold red]EOL[/bold red]", str(by_status["eol"]))
+    if by_status["warning"]:
+        status_table.add_row("[bold yellow]Warning[/bold yellow]", str(by_status["warning"]))
+    if by_status["current"]:
+        status_table.add_row("[green]Current[/green]", str(by_status["current"]))
+    if by_status["not_found"]:
+        status_table.add_row("[yellow]Not Found[/yellow]", str(by_status["not_found"]))
+    if by_status["unknown"]:
+        status_table.add_row("[dim]Unknown[/dim]", str(by_status["unknown"]))
+    if by_status["error"]:
+        status_table.add_row("[red]Error[/red]", str(by_status["error"]))
+
+    _display.console.print()
+    _display.console.print(status_table)
+
+    # --- Top issues (non-current distros, sorted by urgency) ---
+    issues = {k: v for k, v in by_distro.items() if v["status"] in ("eol", "warning")}
+    if issues:
+        issue_table = Table(title="Top Issues", show_lines=False)
+        issue_table.add_column("Distro", style="magenta")
+        issue_table.add_column("Hosts", justify="right")
+        issue_table.add_column("EOL Date")
+        issue_table.add_column("Status")
+        for distro, info in sorted(issues.items(), key=lambda x: (x[1]["days"] or 0)):
+            if info["status"] == "eol":
+                st = "[bold red]EOL[/bold red]"
+            else:
+                st = "[bold yellow]Warning[/bold yellow]"
+            issue_table.add_row(distro, str(info["count"]), info["eol_date"], st)
+        _display.console.print()
+        _display.console.print(issue_table)
+
+    _display.console.print()
+    summary = (
+        f"[bold]Total hosts:[/] {total}  |  "
+        f"[bold red]Errors:[/] {errors}  |  "
+        f"[bold red]EOL:[/] {by_status['eol']}  |  "
+        f"[bold yellow]Warning:[/] {by_status['warning']}"
+    )
+    if csv_file:
+        summary += f"  |  [bold]CSV:[/] {csv_file}"
+    else:
+        summary += "  |  [dim]Use --json for full output[/dim]"
+    _display.console.print(Panel(summary, title="Summary"))
+
+
 def display_summary(results, csv_file):
+    if len(results) > 10:
+        return _display_condensed_summary(results, csv_file)
+
     table = Table(title="Linux Audit Results", show_lines=False)
     table.add_column("Name", style="cyan")
     table.add_column("Host", style="dim")
@@ -355,12 +453,17 @@ def _build_json_results(results, include_sysinfo=False):
 
 def run(args):
     """Run the linux collector subcommand."""
-    if args.no_rich:
-        from ..display import quiet_console
-        quiet_console()
-    elif args.json:
+    # --json implies no Rich output and no CSV (clean stdout)
+    if args.json:
+        args.no_rich = True
+        args.no_csv = True
+
+    if args.json:
         from ..display import redirect_console_to_stderr
         redirect_console_to_stderr()
+    elif args.no_rich:
+        from ..display import quiet_console
+        quiet_console()
 
     _display.console.print(Panel("[bold cyan]Linux Audit Scan[/]\n[dim]Powered by network-audit.io[/]",
                         expand=False))
@@ -369,6 +472,8 @@ def run(args):
         api_url, api_key = "", ""
     else:
         api_url, api_key = load_config()
+    if getattr(args, "dev", None):
+        api_url = resolve_dev_url(args.dev)
     inventory = load_inventory(args.inventory)
 
     password = None

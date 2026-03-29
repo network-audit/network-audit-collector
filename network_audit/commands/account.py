@@ -46,13 +46,14 @@ def run(args):
     monthly_used = d.get("queries_this_month", d.get("queries_today", 0))
     remaining = monthly_limit - monthly_used
 
-    if args.json:
+    use_json = getattr(args, "json", False) and not getattr(args, "rich", False)
+    if use_json:
         json.dump({
             "account_number": d.get("account_number"),
             "tier": d["tier"],
             "monthly_limit": monthly_limit,
             "monthly_used": monthly_used,
-            "remaining": remaining,
+            "credits_remaining": remaining,
             "queries_total": d["queries_total"],
             "created_at": d["created_at"],
         }, sys.stdout, indent=2)
