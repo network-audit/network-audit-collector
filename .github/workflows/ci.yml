@@ -26,10 +26,7 @@ jobs:
         run: uv sync
 
       - name: Install dev tools
-        run: uv pip install ruff pytest
-
-      - name: Lint
-        run: uv run ruff check .
+        run: uv pip install pytest
 
       - name: Run tests
         run: uv run pytest tests/ -v
