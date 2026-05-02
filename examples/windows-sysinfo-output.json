@@ -1,0 +1,54 @@
+[
+  {
+    "name": "win11-dockur",
+    "host": "192.168.1.20",
+    "product": "Windows 11",
+    "version": "25H2",
+    "edition": "Pro",
+    "build": "26200",
+    "pretty_name": "Microsoft Windows 11 Pro",
+    "product_slug": "windows",
+    "version_slug": "11-25h2",
+    "last_patch_kb": "",
+    "last_patch_title": "",
+    "last_patch_date": "",
+    "eol_status": "current",
+    "eol_date": "2028-10-10",
+    "days_until_eol": 933,
+    "is_eol": false,
+    "api_response": {
+      "status": "success",
+      "data": {
+        "product": "windows",
+        "version": "11 25H2 (E)",
+        "slug": "11-25h2-e",
+        "release_date": "2025-09-30",
+        "eoas_date": "2028-10-10",
+        "eol_date": "2028-10-10",
+        "eoes_date": null,
+        "lts": false,
+        "build_number": "10.0.26200",
+        "status": "current",
+        "is_eol": false,
+        "days_until_eol": 933,
+        "source_url": "https://endoflife.date/windows"
+      },
+      "meta": {
+        "query_time_ms": 0,
+        "api_version": "v1",
+        "database_updated": null
+      }
+    },
+    "error": null,
+    "sysinfo": {
+      "cpu": "AMD Ryzen 7",
+      "cores": 2,
+      "memory_total_mb": 8187,
+      "memory_used_mb": 3319,
+      "disk_total_mb": 39962,
+      "disk_used_mb": 19276,
+      "uptime": "23m",
+      "uptime_secs": 1413
+    }
+  }
+]

@@ -186,6 +186,7 @@ def scan_device(device, username, password, timeout, api_url, api_key,
         "codename": "",
         "lts": False,
         "sysinfo": None,
+        "status": "no_match",
         "eol_status": None,
         "eol_date": None,
         "days_until_eol": None,
@@ -204,6 +205,7 @@ def scan_device(device, username, password, timeout, api_url, api_key,
         result["pretty_name"] = parsed["pretty_name"]
         result["sysinfo"] = parsed["sysinfo"]
     except (OSError, paramiko.SSHException) as e:
+        result["status"] = "error"
         result["error"] = str(e)
         return result
 
@@ -218,6 +220,7 @@ def scan_device(device, username, password, timeout, api_url, api_key,
             ))
         if isinstance(api_data, dict):
             data = api_data.get("data", api_data)
+            result["status"] = "found"
             result["eol_status"] = data.get("status", "Unknown")
             result["eol_date"] = data.get("eol_date", "")
             result["days_until_eol"] = data.get("days_until_eol")
@@ -225,7 +228,11 @@ def scan_device(device, username, password, timeout, api_url, api_key,
             result["codename"] = data.get("codename", "")
             result["lts"] = data.get("lts", False)
         elif isinstance(api_data, str):
-            result["eol_status"] = api_data
+            if api_data == "Not Found":
+                result["status"] = "no_match"
+            else:
+                result["status"] = "error"
+                result["error"] = api_data
 
     return result
 
@@ -262,17 +269,18 @@ def _build_csv_rows(results):
 
 def _classify_eol(r):
     """Return a normalized EOL status string for a linux result."""
+    status = r.get("status")
     eol_status = r["eol_status"] or "N/A"
-    if r["error"]:
+    if r["error"] or status == "error":
         return "error"
+    if status == "no_match":
+        return "not_found"
     if eol_status.lower() == "eol" or r.get("is_eol"):
         return "eol"
     if eol_status.lower() == "warning":
         return "warning"
     if eol_status.lower() in ("current", "active", "supported"):
         return "current"
-    if eol_status == "Not Found":
-        return "not_found"
     return "unknown"
 
 
@@ -365,15 +373,16 @@ def display_summary(results, csv_file):
     eol_warning = 0
 
     for r in results:
-        eol_status = r["eol_status"] or "N/A"
+        status = r.get("status", "no_match")
+        eol_status = r["eol_status"] or ""
         eol_date = r["eol_date"] or ""
         days_left = r["days_until_eol"]
 
         # EOL status display
-        if eol_status in ("Not Found", "N/A", "Unknown"):
-            eol_display = f"[dim]{eol_status}[/dim]"
-        elif "error" in eol_status.lower() or "limit" in eol_status.lower():
-            eol_display = f"[yellow]{eol_status}[/yellow]"
+        if status == "error":
+            eol_display = "[red]Error[/red]"
+        elif status == "no_match":
+            eol_display = "[dim]No Match[/dim]"
         elif eol_status.lower() == "eol" or r.get("is_eol"):
             eol_display = "[bold red]EOL[/bold red]"
             eol_flagged += 1
@@ -436,6 +445,7 @@ def _build_json_results(results, include_sysinfo=False):
             "distro": r["distro"],
             "version": r["version"],
             "pretty_name": r["pretty_name"],
+            "status": r["status"],
             "codename": r["codename"],
             "lts": r["lts"],
             "eol_status": r["eol_status"],
@@ -458,15 +468,13 @@ def run(args):
         args.no_rich = True
         args.no_csv = True
 
-    if args.json:
-        from ..display import redirect_console_to_stderr
-        redirect_console_to_stderr()
-    elif args.no_rich:
+    if args.no_rich:
         from ..display import quiet_console
         quiet_console()
 
-    _display.console.print(Panel("[bold cyan]Linux Audit Scan[/]\n[dim]Powered by network-audit.io[/]",
-                        expand=False))
+    if not args.no_rich:
+        _display.console.print(Panel("[bold cyan]Linux Audit Scan[/]\n[dim]Powered by network-audit.io[/]",
+                            expand=False))
 
     if args.no_api:
         api_url, api_key = "", ""
@@ -486,43 +494,54 @@ def run(args):
     status_lock = threading.Lock()
 
     try:
-        with Live(console=_display.console, refresh_per_second=4) as live:
-            progress = create_progress()
-            task_id = progress.add_task("Scanning hosts...", total=len(inventory))
+        def _scan(device):
+            if not args.no_api:
+                wait_if_maintenance(api_url)
+            user = device.get("username", args.username)
+            return scan_device(device, user, password, args.timeout, api_url, api_key,
+                               check_sysinfo=args.sysinfo, no_api=args.no_api,
+                               debug=args.debug)
 
-            def _scan(device):
-                if not args.no_api:
-                    wait_if_maintenance(api_url)
-                user = device.get("username", args.username)
-                return scan_device(device, user, password, args.timeout, api_url, api_key,
-                                   check_sysinfo=args.sysinfo, no_api=args.no_api,
-                                   debug=args.debug)
-
+        if args.no_rich:
             with ThreadPoolExecutor(max_workers=args.concurrent) as pool:
                 futures = {}
                 for i, device in enumerate(inventory):
                     if i > 0 and args.delay > 0:
                         time.sleep(args.delay)
-                    with status_lock:
-                        status_lines.append(f"[yellow]Scanning {device['name']} ({device['host']})...[/]")
-                    live.update(build_live_display(progress, status_lines))
                     futures[pool.submit(_scan, device)] = device
 
                 for future in as_completed(futures):
-                    device = futures[future]
-                    result = future.result()
-                    results.append(result)
+                    results.append(future.result())
+        else:
+            with Live(console=_display.console, refresh_per_second=4) as live:
+                progress = create_progress()
+                task_id = progress.add_task("Scanning hosts...", total=len(inventory))
 
-                    with status_lock:
-                        if result["error"]:
-                            status_lines.append(f"[red]\u2718 {device['name']}: {result['error']}[/]")
-                        else:
-                            status_lines.append(
-                                f"[green]\u2714 {device['name']}: {result['pretty_name']}[/]"
-                            )
+                with ThreadPoolExecutor(max_workers=args.concurrent) as pool:
+                    futures = {}
+                    for i, device in enumerate(inventory):
+                        if i > 0 and args.delay > 0:
+                            time.sleep(args.delay)
+                        with status_lock:
+                            status_lines.append(f"[yellow]Scanning {device['name']} ({device['host']})...[/]")
+                        live.update(build_live_display(progress, status_lines))
+                        futures[pool.submit(_scan, device)] = device
 
-                    progress.advance(task_id)
-                    live.update(build_live_display(progress, status_lines))
+                    for future in as_completed(futures):
+                        device = futures[future]
+                        result = future.result()
+                        results.append(result)
+
+                        with status_lock:
+                            if result["error"]:
+                                status_lines.append(f"[red]\u2718 {device['name']}: {result['error']}[/]")
+                            else:
+                                status_lines.append(
+                                    f"[green]\u2714 {device['name']}: {result['pretty_name']}[/]"
+                                )
+
+                        progress.advance(task_id)
+                        live.update(build_live_display(progress, status_lines))
     except KeyboardInterrupt:
         _display.console.print("\n[yellow]Scan cancelled by user[/]")
         return

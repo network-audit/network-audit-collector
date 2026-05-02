@@ -1,10 +1,5 @@
 # network-audit-collector
 
-[![CI](https://github.com/network-audit/network-audit-collector/actions/workflows/ci.yml/badge.svg)](https://github.com/network-audit/network-audit-collector/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
-
-
 > If you run into any issues, please [open an issue](https://github.com/network-audit/network-audit-collector/issues), submit a PR, or send an email. The goal of this project is to help you get your time back.
 
 A CLI tool that scans your Cisco network devices and Linux hosts, then checks their EOL (End-of-Life) and CVE status against the [network-audit.io](https://network-audit.io) API.

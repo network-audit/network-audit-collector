@@ -360,6 +360,7 @@ def scan_device(device, username, password, timeout, api_url, api_key, use_telne
         "vendor": "cisco",
         "model": "Unknown",
         "os_version": "Unknown",
+        "status": "no_match",
         "eol": None,
         "cve": None,
         "error": None,
@@ -383,6 +384,7 @@ def scan_device(device, username, password, timeout, api_url, api_key, use_telne
             if pid:
                 result["model"] = pid
     except (OSError, paramiko.SSHException) as e:
+        result["status"] = "error"
         result["error"] = str(e)
         return result
 
@@ -400,6 +402,17 @@ def scan_device(device, username, password, timeout, api_url, api_key, use_telne
             cve_model = "eos"
             cve_version = None
         result["cve"] = query_cve(api_url, api_key, result["vendor"], cve_model, cve_version)
+        if isinstance(result["eol"], dict):
+            result["status"] = "found"
+        elif isinstance(result["eol"], str):
+            if result["eol"] == "Not Found":
+                result["status"] = "no_match"
+            else:
+                result["status"] = "error"
+                result["error"] = result["eol"]
+        if isinstance(result["cve"], str) and result["status"] == "found":
+            result["status"] = "error"
+            result["error"] = result["cve"]
 
     return result
 
@@ -637,6 +650,7 @@ def _build_json_results(results):
             "hostname": r["hostname"],
             "model": r["model"],
             "os_version": r["os_version"],
+            "status": r["status"],
             "eol_status": _extract_eol_status(r["eol"]),
             "eol_details": _extract_eol_details(r["eol"]),
             "cve_count": _extract_cve_count(r["cve"]),
@@ -661,8 +675,9 @@ def run(args):
         from ..display import quiet_console
         quiet_console()
 
-    _display.console.print(Panel("[bold cyan]Network Audit Scan[/]\n[dim]Powered by network-audit.io[/]",
-                        expand=False))
+    if not args.json:
+        _display.console.print(Panel("[bold cyan]Network Audit Scan[/]\n[dim]Powered by network-audit.io[/]",
+                            expand=False))
 
     api_url, api_key = load_config()
     if getattr(args, "dev", None):
